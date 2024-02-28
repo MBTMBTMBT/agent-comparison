@@ -11,6 +11,6 @@ class AbstractAgent(ABC):
         :param state: The current state of the environment.
         :return: A tuple containing:
             - The action chosen by the agent as an integer.
-            - The distribution of policy.
+            - The distribution of actions.
         """
         pass
