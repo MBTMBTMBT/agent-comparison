@@ -6,6 +6,17 @@ from minigrid.manual_control import ManualControl
 from minigrid.minigrid_env import MiniGridEnv
 
 
+ACTION_NAMES = {
+    0: 'Turn Left',
+    1: 'Turn Right',
+    2: 'Move Forward',
+    3: 'Pick Up',
+    4: 'Drop',
+    5: 'Toggle',
+    6: 'Done'
+}
+
+
 class CustomEnvFromFile(MiniGridEnv):
     """
     A custom MiniGrid environment that loads its layout and object properties from a text file.
