@@ -1,246 +1,12 @@
-import matplotlib.pyplot
+import gymnasium
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torchvision.transforms as transforms
 import numpy as np
-from torch.distributions import Categorical
 from minigrid.wrappers import FullyObsWrapper, RGBImgObsWrapper
 from minigrid_custom_env import CustomEnvFromFile
-import imageio
-import matplotlib.pyplot as plt
-import os
-import torch.nn.functional as F
+from abstract_agent import AbstractAgent
 
-
-ACTION_NAMES = {
-    0: 'Turn Left',
-    1: 'Turn Right',
-    2: 'Move Forward',
-    3: 'Pick Up',
-    4: 'Drop',
-    5: 'Toggle',
-    6: 'Done'
-}
-
-
-class PrioritizedReplayBuffer:
-    def __init__(self, capacity, alpha=0.8):
-        self.capacity = capacity
-        self.alpha = alpha
-        self.buffer = []
-        self.priorities = np.zeros((capacity,), dtype=np.float32)
-        self.pos = 0
-
-    def add(self, state, action, reward, next_state, done):
-        max_prio = max(self.priorities) if self.buffer else 1.0
-        if len(self.buffer) < self.capacity:
-            self.buffer.append((state, action, reward, next_state, done))
-        else:
-            self.buffer[self.pos] = (state, action, reward, next_state, done)
-        self.priorities[self.pos] = max_prio ** self.alpha
-        self.pos = (self.pos + 1) % self.capacity
-
-    def sample(self, batch_size, beta=0.4):
-        if len(self.buffer) == self.capacity:
-            prios = self.priorities
-        else:
-            prios = self.priorities[:self.pos]
-        probabilities = prios ** self.alpha / np.sum(prios ** self.alpha)
-
-        indices = np.random.choice(len(self.buffer), batch_size, p=probabilities)
-        samples = [self.buffer[idx] for idx in indices]
-
-        total = len(self.buffer)
-        weights = (total * probabilities[indices]) ** (-beta)
-        weights /= weights.max()
-        return samples, indices, np.array(weights, dtype=np.float32)
-
-    def update_priorities(self, indices, errors):
-        for idx, error in zip(indices, errors):
-            self.priorities[idx] = error + 1e-5  # Avoid zero priority
-
-
-class PPOPolicyNetwork(nn.Module):
-    def __init__(self, observation_channels, action_space):
-        super(PPOPolicyNetwork, self).__init__()
-        self.observation_channels = observation_channels
-        self.action_space = action_space
-
-        # Convolutional layers
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(observation_channels, 32, kernel_size=8, stride=4),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d(output_size=(7, 7)),
-            nn.Flatten(),
-        )
-
-        # Fully connected layer for action logits
-        self.fc_action = nn.Sequential(
-            nn.Linear(7 * 7 * 64, 512),
-            nn.ReLU(),
-            nn.Linear(512, action_space),
-        )
-
-        # Fully connected layer for state value estimate
-        self.fc_value = nn.Sequential(
-            nn.Linear(7 * 7 * 64, 512),
-            nn.ReLU(),
-            nn.Linear(512, 1),
-        )
-
-    def forward(self, x):
-        x = self.conv_layers(x)
-        action_logits = self.fc_action(x)
-        state_value = self.fc_value(x).squeeze(-1)  # Remove extra dimension for single value output
-        return F.softmax(action_logits, dim=-1), state_value
-
-
-# Define the DQN Agent
-# PPO Agent Implementation
-class PPOAgent:
-    def __init__(self, observation_channels, action_space, lr=1e-3, gamma=0.99, clip_param=0.2, update_interval=4000,
-                 epochs=10, device='cpu'):
-        self.observation_channels = observation_channels
-        self.action_space = action_space
-        self.lr = lr
-        self.gamma = gamma
-        self.clip_param = clip_param
-        self.update_interval = update_interval
-        self.epochs = epochs
-        self.device = torch.device(device)
-
-        self.policy = PPOPolicyNetwork(observation_channels, action_space).to(self.device)
-        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.lr)
-
-        # These buffers store trajectories
-        self.states = []
-        self.actions = []
-        self.state_values = []
-        self.log_probs = []
-        self.rewards = []
-        self.is_terminals = []
-
-    def act(self, state):
-        state = state.float().to(self.device)
-        probs, state_value = self.policy(state)
-        m = Categorical(probs)
-        action = m.sample()
-        # self.states.append(state)
-        # self.actions.append(action)
-        self.log_probs.append(m.log_prob(action))
-        self.state_values.append(state_value)
-        return action.item()
-
-    def calculate_returns(self, rewards, gamma, normalization=True):
-        R = 0
-        returns = []
-        for r in reversed(rewards):
-            R = r + gamma * R
-            returns.insert(0, R)
-        returns = torch.tensor(returns)
-        if normalization:
-            returns = (returns - returns.mean()) / (returns.std() + 1e-7)
-        return returns
-
-    def update(self):
-        # Convert lists to tensors
-        states = torch.stack(self.states).squeeze(1).to(self.device)
-        actions = torch.tensor(self.actions, dtype=torch.int64).to(self.device)
-        old_log_probs = torch.stack(self.log_probs).to(self.device)
-
-        # Placeholder for rewards-to-go calculation; implement your method as needed
-        rewards_to_go = self.calculate_returns(self.rewards, self.gamma).to(self.device)
-
-        # Placeholder for advantage calculation; implement a more sophisticated method as needed
-        advantages = rewards_to_go - torch.tensor(self.state_values).to(self.device).squeeze()
-
-        # Calculate current log probs and state values for all stored states and actions
-        probs, state_values = self.policy(states)
-        dist = Categorical(probs)
-        current_log_probs = dist.log_prob(actions)
-
-        # Calculate the ratio (pi_theta / pi_theta_old)
-        ratios = torch.exp(current_log_probs - old_log_probs)
-
-        # Calculate surrogate loss
-        surr1 = ratios * advantages.detach()
-        surr2 = torch.clamp(ratios, 1.0 - self.clip_param, 1.0 + self.clip_param) * advantages.detach()
-        policy_loss = -torch.min(surr1, surr2).mean()
-
-        # Placeholder for value loss; consider using rewards_to_go for more accurate value updates
-        value_loss = F.mse_loss(torch.squeeze(state_values), rewards_to_go.detach())
-
-        # Take gradient step
-        self.optimizer.zero_grad()
-        total_loss = policy_loss + value_loss
-        total_loss.backward()
-        self.optimizer.step()
-
-        # Clear memory
-        self.clear_memory()
-
-    def clear_memory(self):
-        self.states = []
-        self.actions = []
-        self.state_values = []
-        self.log_probs = []
-        self.rewards = []
-        self.is_terminals = []
-
-    def create_image_with_action(self, image, action, step_number, reward):
-        """
-        Creates an image with the action text and additional details overlay.
-
-        Parameters:
-        - image: The image array in the correct format for matplotlib.
-        - action: The action taken in this step.
-        - step_number: The current step number.
-        - reward: The reward received after taking the action.
-        """
-        # Convert action number to descriptive name and prepare the text
-        action_text = ACTION_NAMES.get(action, f"Action {action}")
-        details_text = f"Step: {step_number}, Reward: {reward}"
-
-        # Normalize or convert the image if necessary
-        image = image.astype(np.uint8)  # Ensure image is in uint8 format for display
-
-        fig, ax = plt.subplots()
-        ax.imshow(image)
-        # Position the action text
-        ax.text(0.5, -0.1, action_text, color='white', transform=ax.transAxes,
-                ha="center", fontsize=12, bbox=dict(facecolor='red', alpha=0.5))
-        # Position the details text (step number and reward)
-        ax.text(0.5, -0.15, details_text, color='white', transform=ax.transAxes,
-                ha="center", fontsize=12, bbox=dict(facecolor='blue', alpha=0.5))
-        ax.axis('off')
-
-        # Convert the Matplotlib figure to an image array and close the figure to free memory
-        fig.canvas.draw()
-        img_array = np.array(fig.canvas.renderer.buffer_rgba())
-        plt.close(fig)
-
-        return img_array
-
-    def save_trajectory_as_gif(self, trajectory, rewards, folder="trajectories", filename="trajectory.gif"):
-        """
-        Saves the trajectory as a GIF in a specified folder, including step numbers and rewards.
-
-        Parameters:
-        - trajectory: List of tuples, each containing (image, action).
-        - rewards: List of rewards for each step in the trajectory.
-        """
-        # Ensure the target folder exists
-        os.makedirs(folder, exist_ok=True)
-        filepath = os.path.join(folder, filename)
-
-        images_with_actions = [self.create_image_with_action(img, action, step_number, rewards[step_number])
-                               for step_number, (img, action) in enumerate(trajectory)]
-        imageio.mimsave(filepath, images_with_actions, fps=3)
+from utils import *
 
 
 def preprocess_observation(obs: dict, rotate=False) -> torch.Tensor:
@@ -286,10 +52,10 @@ def preprocess_observation(obs: dict, rotate=False) -> torch.Tensor:
 
 
 def run_training(
-    env: CustomEnvFromFile,
-    agent: PPOAgent,
-    episodes: int = 100,
-    env_name: str = ""
+        env: gymnasium.Env,
+        agent: AbstractAgent,
+        episodes: int = 100,
+        env_name: str = ""
 ) -> None:
     """
     Runs the training loop for a specified number of episodes using PPO.
@@ -303,6 +69,8 @@ def run_training(
     Returns:
         None
     """
+    time_step = 0
+    total_reward = 0
     for e in range(episodes):
         trajectory = []  # List to record each step for the GIF.
         obs, _ = env.reset()  # Reset the environment at the start of each episode.
@@ -311,20 +79,21 @@ def run_training(
         # episode_states, episode_actions, episode_rewards, episode_log_probs = [], [], [], []
 
         for time in range(env.max_steps):
-            action = agent.act(state)  # Agent selects an action based on the current state.
+            time_step += 1
+
+            action = agent.select_action(state, return_distribution=False)  # Agent selects an action based on the current state.
             next_obs, reward, terminated, truncated, info = env.step(action)  # Execute the action.
-            agent.states.append(state)
-            agent.actions.append(action)
-            agent.rewards.append(float(reward))
             next_state = preprocess_observation(next_obs, rotate=True)  # Preprocess the new observation.
             trajectory.append((env.render(), action))  # Append the step for the GIF.
-
             done = terminated or truncated  # Check if the episode has ended.
-
             state = next_state  # Update the current state for the next iteration.
+            total_reward += reward
+
+            if time_step % update_timestep == 0:
+                agent.update()
 
             if done:
-                print(f"Episode: {e}/{episodes}, Score: {time}")
+                print(f"Episode: {e}/{episodes}, Time: {time}, Reward: {total_reward}")
                 # Save the recorded trajectory as a GIF after each episode.
                 agent.save_trajectory_as_gif(trajectory, agent.rewards, filename=env_name + f"_trajectory_{e}.gif")
                 agent.update()
@@ -332,9 +101,44 @@ def run_training(
 
 
 if __name__ == "__main__":
+    import os
+    from minigrid_custom_env import ACTION_NAMES
+    from ppo import PPOWithImageEncoder
+
     # Device configuration
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # device = "cpu"
+
+    ####### initialize environment hyperparameters ######
+    has_continuous_action_space = False
+    max_ep_len = 400  # max timesteps in one episode
+    max_training_timesteps = int(1e5)  # break training loop if timeteps > max_training_timesteps
+    print_freq = max_ep_len * 4  # print avg reward in the interval (in num timesteps)
+    log_freq = max_ep_len * 2  # log avg reward in the interval (in num timesteps)
+    save_model_freq = int(2e4)  # save model frequency (in num timesteps)
+    #####################################################
+    ## Note : print/log frequencies should be > than max_ep_len
+
+    ################ PPO hyperparameters ################
+    update_timestep = max_ep_len * 4  # update policy every n timesteps
+    K_epochs = 40  # update policy for K epochs
+    eps_clip = 0.2  # clip parameter for PPO
+    gamma = 0.99  # discount factor
+    lr_encoder = 0.001  # learning rate for encoder network
+    lr_actor = 0.0003  # learning rate for actor network
+    lr_critic = 0.001  # learning rate for critic network
+    input_channels = 3  # RGB input
+    state_dim = 256  # lenth of the vector encoded by encoder
+    action_dim = len(ACTION_NAMES)  # actions
+    #####################################################
+
+    # check model saving dir
+    session_name = "saved-models"
+    if not os.path.isdir(session_name):
+        os.makedirs(session_name)
+
+    # Check for the latest saved model
+    latest_checkpoint = find_latest_checkpoint(session_name)
 
     # List of environments to train on
     environment_files = [
@@ -353,20 +157,84 @@ if __name__ == "__main__":
         'simple_test_door_key.txt': 150,
         # Define episodes for more environments as needed
     }
-    batch_size = 32
+
+    ################## init the model ###################
+    ppo_agent = PPOWithImageEncoder(
+        input_channels, state_dim, action_dim,
+        lr_encoder, lr_actor, lr_critic,
+        gamma,
+        K_epochs,
+        eps_clip,
+        has_continuous_action_space,
+    )
+    # load parameters if it has any
+    if latest_checkpoint:
+        print(f"Loading model from {latest_checkpoint}")
+        counter, performance = ppo_agent.load(latest_checkpoint)
+        counter += 1
+    else:
+        counter = 0
+        performance = float('inf')
+
+    ############# print all hyperparameters #############
+    print("--------------------------------------------------------------------------------------------")
+
+    print("max training timesteps : ", max_training_timesteps)
+    print("max timesteps per episode : ", max_ep_len)
+
+    print("model saving frequency : " + str(save_model_freq) + " timesteps")
+    print("log frequency : " + str(log_freq) + " timesteps")
+    print("printing average reward over episodes in last : " + str(print_freq) + " timesteps")
+
+    print("--------------------------------------------------------------------------------------------")
+
+    print("state space dimension : ", state_dim)
+    print("action space dimension : ", action_dim)
+
+    print("--------------------------------------------------------------------------------------------")
+
+    if has_continuous_action_space:
+        print("Initializing a continuous action space policy")
+        print("--------------------------------------------------------------------------------------------")
+        # print("starting std of action distribution : ", action_std)
+        # print("decay rate of std of action distribution : ", action_std_decay_rate)
+        # print("minimum std of action distribution : ", min_action_std)
+        # print("decay frequency of std of action distribution : " + str(action_std_decay_freq) + " timesteps")
+
+    else:
+        print("Initializing a discrete action space policy")
+
+    print("--------------------------------------------------------------------------------------------")
+
+    print("PPO update frequency : " + str(update_timestep) + " timesteps")
+    print("PPO K epochs : ", K_epochs)
+    print("PPO epsilon clip : ", eps_clip)
+    print("discount factor (gamma) : ", gamma)
+
+    print("--------------------------------------------------------------------------------------------")
+
+    print("optimizer learning rate actor : ", lr_actor)
+    print("optimizer learning rate critic : ", lr_critic)
+
+    # if random_seed:
+    #     print("--------------------------------------------------------------------------------------------")
+    #     print("setting random seed to ", random_seed)
+    #     torch.manual_seed(random_seed)
+    #     env.seed(random_seed)
+    #     np.random.seed(random_seed)
+
+    #####################################################
+
+    print("============================================================================================")
 
     for env_file in environment_files:
         # Initialize environment
-        env = RGBImgObsWrapper(FullyObsWrapper(CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=512)))
-        image_shape = env.observation_space.spaces['image'].shape
-        action_space = env.action_space.n
-
-        # Initialize DQN agent for the current environment
-        agent = PPOAgent(observation_channels=image_shape[-1], action_space=action_space, lr=1e-3, gamma=0.99, device=device)
-        # Fetch the number of episodes for the current environment
-        episodes = episodes_per_env.get(env_file, 100)  # Default to 100 episodes if not specified
+        env = RGBImgObsWrapper(FullyObsWrapper(
+            CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len)))
 
         # Run training for the current environment
         print(f"Training on {env_file}")
-        run_training(env, agent, episodes=episodes, env_name=env_file)
+        run_training(env, ppo_agent, episodes=episodes_per_env[env_file], env_name=env_file)
         print(f"Completed training on {env_file}")
+
+        ppo_agent.save(f"{session_name}/model_epoch_{counter}.pth")
