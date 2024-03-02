@@ -5,6 +5,7 @@ from torch.distributions import Categorical
 import torchvision.models as models
 from abstract_agent import AbstractAgent
 from torch.utils.data import TensorDataset, DataLoader
+from tqdm import tqdm
 
 
 class RolloutBuffer:
@@ -152,7 +153,7 @@ class ActorCriticWithImageEncoder(ActorCritic):
 
 
 class PPO (AbstractAgent):
-    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, batch_size, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu'):
+    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, batch_size, replay_size, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu'):
         self.device = torch.device(device)
 
         self.has_continuous_action_space = has_continuous_action_space
@@ -164,6 +165,7 @@ class PPO (AbstractAgent):
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
         self.batch_size = batch_size
+        self.replay_size = replay_size
 
         self.buffer = RolloutBuffer()
 
@@ -251,14 +253,33 @@ class PPO (AbstractAgent):
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
-        # convert list to tensor
+        # Convert list to tensor and ensure minimum size
         old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
 
-        # calculate advantages
+        # Function to repeat tensor until it reaches the desired size
+        def repeat_tensor_to_size(tensor, target_size, dim=0):
+            repeat_times = (target_size + tensor.size(dim) - 1) // tensor.size(
+                dim)  # Calculate how many times to repeat
+            repeated_tensor = tensor.repeat(repeat_times, *[1] * (tensor.dim() - 1))  # Repeat tensor
+            return repeated_tensor[:target_size]  # Trim excess
+
+        # Ensure all tensors are at least self.replay_size in the first dimension
+        old_states = repeat_tensor_to_size(old_states, self.replay_size)
+        old_actions = repeat_tensor_to_size(old_actions, self.replay_size)
+        old_logprobs = repeat_tensor_to_size(old_logprobs, self.replay_size)
+        old_state_values = repeat_tensor_to_size(old_state_values, self.replay_size)
+        rewards = repeat_tensor_to_size(rewards, self.replay_size)
         advantages = rewards.detach() - old_state_values.detach()
+
+        try:
+            # Recalculate advantages if necessary
+            advantages = repeat_tensor_to_size(advantages, self.replay_size)
+        except Exception as e:
+            self.buffer.clear()
+            return
 
         try:
             # Creating dataset and dataloader for mini-batch processing
@@ -269,12 +290,19 @@ class PPO (AbstractAgent):
             return
 
         # Optimize policy for K epochs
-        for _ in range(self.K_epochs):
+        for epoch in tqdm(range(self.K_epochs), desc='Epochs'):
+            # Initialize variables to track progress within an epoch
+            epoch_loss = 0.0
+            epoch_surr1 = 0.0
+            epoch_surr2 = 0.0
+            epoch_entropy = 0.0
+            batch_count = 0
+
             for old_states_batch, old_actions_batch, old_logprobs_batch, advantages_batch, rewards_batch in dataloader:
                 # Evaluating old actions and values for the mini-batch
                 logprobs, state_values, dist_entropy = self.policy.evaluate(old_states_batch, old_actions_batch)
 
-                # match state_values tensor dimensions with rewards tensor for the mini-batch
+                # Match state_values tensor dimensions with rewards tensor for the mini-batch
                 state_values = torch.squeeze(state_values)
 
                 # Finding the ratio (pi_theta / pi_theta__old) for the mini-batch
@@ -284,13 +312,30 @@ class PPO (AbstractAgent):
                 surr1 = ratios * advantages_batch
                 surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages_batch
 
-                # final loss of clipped objective PPO for the mini-batch
+                # Final loss of clipped objective PPO for the mini-batch
                 loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards_batch) - 0.01 * dist_entropy
 
-                # take gradient step
+                # Take gradient step
                 self.optimizer.zero_grad()
                 loss.mean().backward()
                 self.optimizer.step()
+
+                # Update epoch tracking variables
+                epoch_loss += loss.mean().item()
+                epoch_surr1 += surr1.mean().item()
+                epoch_surr2 += surr2.mean().item()
+                epoch_entropy += dist_entropy.mean().item()
+                batch_count += 1
+
+            # Calculate averages for the epoch
+            avg_epoch_loss = epoch_loss / batch_count
+            avg_epoch_surr1 = epoch_surr1 / batch_count
+            avg_epoch_surr2 = epoch_surr2 / batch_count
+            avg_epoch_entropy = epoch_entropy / batch_count
+
+            # Display detailed information for the epoch
+            # tqdm.write(
+            #     f'Epoch {epoch + 1}/{self.K_epochs} - Loss: {avg_epoch_loss:.4f}, Surr1: {avg_epoch_surr1:.4f}, Surr2: {avg_epoch_surr2:.4f}, Entropy: {avg_epoch_entropy:.4f}')
 
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())
@@ -325,9 +370,9 @@ class PPO (AbstractAgent):
 
 
 class PPOWithImageEncoder(PPO):
-    def __init__(self, input_channels, img_output_size, action_dim, lr_encoder, lr_actor, lr_critic, gamma, K_epochs, batch_size, eps_clip,
+    def __init__(self, input_channels, img_output_size, action_dim, lr_encoder, lr_actor, lr_critic, gamma, K_epochs, batch_size, replay_size, eps_clip,
                  has_continuous_action_space, action_std_init=0.6, device='cpu'):
-        super().__init__(img_output_size, action_dim, lr_actor, lr_critic, gamma, K_epochs, batch_size, eps_clip,
+        super().__init__(img_output_size, action_dim, lr_actor, lr_critic, gamma, K_epochs, batch_size, replay_size, eps_clip,
                          has_continuous_action_space, action_std_init, device)
         self.has_continuous_action_space = has_continuous_action_space
 
