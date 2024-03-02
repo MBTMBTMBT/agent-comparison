@@ -4,6 +4,7 @@ from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import torchvision.models as models
 from abstract_agent import AbstractAgent
+from torch.utils.data import TensorDataset, DataLoader
 
 
 class RolloutBuffer:
@@ -120,14 +121,14 @@ class FlexibleImageEncoder(nn.Module):
         super(FlexibleImageEncoder, self).__init__()
         self.resnet = models.resnet18(pretrained=True)
         self.resnet.conv1 = nn.Conv2d(input_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
+        # self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(self.resnet.fc.in_features, output_size)
         self.resnet.fc = nn.Identity()
 
     def forward(self, x):
         x = self.resnet(x)
-        x = self.adapt_pool(x)
-        x = torch.flatten(x, 1)
+        # x = self.adapt_pool(x)
+        # x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
 
@@ -151,7 +152,7 @@ class ActorCriticWithImageEncoder(ActorCritic):
 
 
 class PPO (AbstractAgent):
-    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu'):
+    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, batch_size, eps_clip, has_continuous_action_space, action_std_init=0.6, device='cpu'):
         self.device = torch.device(device)
 
         self.has_continuous_action_space = has_continuous_action_space
@@ -162,6 +163,7 @@ class PPO (AbstractAgent):
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
+        self.batch_size = batch_size
 
         self.buffer = RolloutBuffer()
 
@@ -210,7 +212,7 @@ class PPO (AbstractAgent):
 
         if self.has_continuous_action_space:
             with torch.no_grad():
-                state = torch.FloatTensor(state).to(device)
+                state = torch.FloatTensor(state).to(self.device)
                 action, action_logprob, state_val = self.policy_old.act(state)
 
             self.buffer.states.append(state)
@@ -222,7 +224,7 @@ class PPO (AbstractAgent):
 
         else:
             with torch.no_grad():
-                state = torch.FloatTensor(state).to(device)
+                state = torch.FloatTensor(state).to(self.device)
                 action, action_logprob, state_val = self.policy_old.act(state)
 
             self.buffer.states.append(state)
@@ -236,7 +238,6 @@ class PPO (AbstractAgent):
             return action.item()
 
     def update(self):
-
         # Monte Carlo estimate of returns
         rewards = []
         discounted_reward = 0
@@ -247,41 +248,49 @@ class PPO (AbstractAgent):
             rewards.insert(0, discounted_reward)
 
         # Normalizing the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
-        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
-        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
-        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
-        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(device)
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
+        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
+        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
+        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
 
         # calculate advantages
         advantages = rewards.detach() - old_state_values.detach()
 
+        try:
+            # Creating dataset and dataloader for mini-batch processing
+            dataset = TensorDataset(old_states, old_actions, old_logprobs, advantages, rewards)
+            dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        except IndexError:
+            self.buffer.clear()
+            return
+
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
+            for old_states_batch, old_actions_batch, old_logprobs_batch, advantages_batch, rewards_batch in dataloader:
+                # Evaluating old actions and values for the mini-batch
+                logprobs, state_values, dist_entropy = self.policy.evaluate(old_states_batch, old_actions_batch)
 
-            # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
+                # match state_values tensor dimensions with rewards tensor for the mini-batch
+                state_values = torch.squeeze(state_values)
 
-            # match state_values tensor dimensions with rewards tensor
-            state_values = torch.squeeze(state_values)
+                # Finding the ratio (pi_theta / pi_theta__old) for the mini-batch
+                ratios = torch.exp(logprobs - old_logprobs_batch.detach())
 
-            # Finding the ratio (pi_theta / pi_theta__old)
-            ratios = torch.exp(logprobs - old_logprobs.detach())
+                # Finding Surrogate Loss for the mini-batch
+                surr1 = ratios * advantages_batch
+                surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages_batch
 
-            # Finding Surrogate Loss
-            surr1 = ratios * advantages
-            surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
+                # final loss of clipped objective PPO for the mini-batch
+                loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards_batch) - 0.01 * dist_entropy
 
-            # final loss of clipped objective PPO
-            loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards) - 0.01 * dist_entropy
-
-            # take gradient step
-            self.optimizer.zero_grad()
-            loss.mean().backward()
-            self.optimizer.step()
+                # take gradient step
+                self.optimizer.zero_grad()
+                loss.mean().backward()
+                self.optimizer.step()
 
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())
@@ -316,9 +325,9 @@ class PPO (AbstractAgent):
 
 
 class PPOWithImageEncoder(PPO):
-    def __init__(self, input_channels, img_output_size, action_dim, lr_encoder, lr_actor, lr_critic, gamma, K_epochs, eps_clip,
+    def __init__(self, input_channels, img_output_size, action_dim, lr_encoder, lr_actor, lr_critic, gamma, K_epochs, batch_size, eps_clip,
                  has_continuous_action_space, action_std_init=0.6, device='cpu'):
-        super().__init__(img_output_size, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip,
+        super().__init__(img_output_size, action_dim, lr_actor, lr_critic, gamma, K_epochs, batch_size, eps_clip,
                          has_continuous_action_space, action_std_init, device)
         self.has_continuous_action_space = has_continuous_action_space
 
