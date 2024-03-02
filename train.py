@@ -20,6 +20,13 @@ def preprocess_observation(obs: dict, rotate=False) -> torch.Tensor:
     """
     # Extract the 'image' array from the observation dictionary
     image_obs = obs['image']
+    rotated_tensor = preprocess_image(image_obs, rotate)
+    return rotated_tensor
+
+
+def preprocess_image(img: np.ndarray, rotate=False) -> torch.Tensor:
+    # Extract the 'image' array from the observation dictionary
+    image_obs = img
 
     # Convert the numpy array to a PIL Image for rotation
     transform_to_pil = transforms.ToPILImage()
@@ -69,12 +76,14 @@ def run_training(
     Returns:
         None
     """
-    time_step = 0
-    total_reward = 0
     for e in range(episodes):
+        time_step = 0
+        total_reward = 0
+        rewards = [0.0,]
         trajectory = []  # List to record each step for the GIF.
         obs, _ = env.reset()  # Reset the environment at the start of each episode.
-        state = preprocess_observation(obs, rotate=True)  # Preprocess the observation for the agent.
+        rendered = env.render()
+        state = preprocess_image(rendered, rotate=False)  # Preprocess the observation for the agent.
         # state_img = obs['image']  # Store the original 'image' observation for visualization.
         # episode_states, episode_actions, episode_rewards, episode_log_probs = [], [], [], []
 
@@ -83,19 +92,25 @@ def run_training(
 
             action = agent.select_action(state, return_distribution=False)  # Agent selects an action based on the current state.
             next_obs, reward, terminated, truncated, info = env.step(action)  # Execute the action.
-            next_state = preprocess_observation(next_obs, rotate=True)  # Preprocess the new observation.
-            trajectory.append((env.render(), action))  # Append the step for the GIF.
             done = terminated or truncated  # Check if the episode has ended.
+            # saving reward and is_terminals
+            agent.buffer.rewards.append(reward)
+            agent.buffer.is_terminals.append(done)
+            trajectory.append((rendered, action))  # Append the step for the GIF.
+            rendered = env.render()
+            next_state = preprocess_image(rendered, rotate=False)  # Preprocess the new observation.
             state = next_state  # Update the current state for the next iteration.
             total_reward += reward
+            rewards.append(reward)
 
-            if time_step % update_timestep == 0:
-                agent.update()
+            # if time_step % update_timestep == 0:
+            #     agent.update()
 
             if done:
-                print(f"Episode: {e}/{episodes}, Time: {time}, Reward: {total_reward}")
+                print(f"Episode: {e}/{episodes}, Time: {time + 1}, Reward: {total_reward}")
+                trajectory.append((rendered, action))
                 # Save the recorded trajectory as a GIF after each episode.
-                agent.save_trajectory_as_gif(trajectory, agent.rewards, filename=env_name + f"_trajectory_{e}.gif")
+                save_trajectory_as_gif(trajectory, rewards, ACTION_NAMES, filename=env_name + f"_trajectory_{e}.gif")
                 agent.update()
                 break
 
@@ -111,7 +126,7 @@ if __name__ == "__main__":
 
     ####### initialize environment hyperparameters ######
     has_continuous_action_space = False
-    max_ep_len = 400  # max timesteps in one episode
+    max_ep_len = 1024  # max timesteps in one episode
     max_training_timesteps = int(1e5)  # break training loop if timeteps > max_training_timesteps
     print_freq = max_ep_len * 4  # print avg reward in the interval (in num timesteps)
     log_freq = max_ep_len * 2  # log avg reward in the interval (in num timesteps)
@@ -122,13 +137,14 @@ if __name__ == "__main__":
     ################ PPO hyperparameters ################
     update_timestep = max_ep_len * 4  # update policy every n timesteps
     K_epochs = 40  # update policy for K epochs
-    eps_clip = 0.2  # clip parameter for PPO
+    batch_size = 32
+    eps_clip = 0.05  # clip parameter for PPO
     gamma = 0.99  # discount factor
     lr_encoder = 0.001  # learning rate for encoder network
-    lr_actor = 0.0003  # learning rate for actor network
-    lr_critic = 0.001  # learning rate for critic network
+    lr_actor = 0.003  # learning rate for actor network
+    lr_critic = 0.005  # learning rate for critic network
     input_channels = 3  # RGB input
-    state_dim = 256  # lenth of the vector encoded by encoder
+    state_dim = 512  # lenth of the vector encoded by encoder
     action_dim = len(ACTION_NAMES)  # actions
     #####################################################
 
@@ -142,8 +158,10 @@ if __name__ == "__main__":
 
     # List of environments to train on
     environment_files = [
+        'simple_test_corridor_mini.txt',
         'simple_test_corridor.txt',
         'simple_test_corridor_long.txt',
+        'simple_test_openspace.txt',
         'simple_test_maze_small.txt',
         'simple_test_door_key.txt',
         # Add more file paths as needed
@@ -151,10 +169,12 @@ if __name__ == "__main__":
 
     # Training settings
     episodes_per_env = {
-        'simple_test_corridor.txt': 150,
-        'simple_test_corridor_long.txt': 150,
-        'simple_test_maze_small.txt': 150,
-        'simple_test_door_key.txt': 150,
+        'simple_test_corridor_mini.txt': 500,
+        'simple_test_corridor.txt': 500,
+        'simple_test_corridor_long.txt': 500,
+        'simple_test_openspace.txt': 500,
+        'simple_test_maze_small.txt': 500,
+        'simple_test_door_key.txt': 500,
         # Define episodes for more environments as needed
     }
 
@@ -164,8 +184,10 @@ if __name__ == "__main__":
         lr_encoder, lr_actor, lr_critic,
         gamma,
         K_epochs,
+        batch_size,
         eps_clip,
         has_continuous_action_space,
+        device=device
     )
     # load parameters if it has any
     if latest_checkpoint:
@@ -237,4 +259,6 @@ if __name__ == "__main__":
         run_training(env, ppo_agent, episodes=episodes_per_env[env_file], env_name=env_file)
         print(f"Completed training on {env_file}")
 
-        ppo_agent.save(f"{session_name}/model_epoch_{counter}.pth")
+        ppo_agent.save(f"{session_name}/model_epoch_{counter}.pth", counter)
+
+        counter += 1
