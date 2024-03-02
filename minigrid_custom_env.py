@@ -25,7 +25,7 @@ class CustomEnvFromFile(MiniGridEnv):
         txt_file_path (str): Path to the text file containing the environment layout.
         layout_size (int): The size of the environment, either specified or determined from the file.
         agent_start_pos (tuple[int, int]): Starting position of the agent.
-        agent_start_dir (int): Initial direction the agent is facing.
+        agent_start_dir (int): Initial direction the agent is facing. None for random direction
         mission (str): Custom mission description.
     """
 
@@ -34,7 +34,7 @@ class CustomEnvFromFile(MiniGridEnv):
             txt_file_path: str,
             size: Optional[int] = None,
             agent_start_pos: tuple[int, int] = (1, 1),
-            agent_start_dir: int = 2,
+            agent_start_dir: Optional[int] = None,  # Allow None for random initialization
             custom_mission: str = "Explore and interact with objects.",
             max_steps: Optional[int] = None,
             **kwargs,
@@ -56,8 +56,20 @@ class CustomEnvFromFile(MiniGridEnv):
             **kwargs,
         )
         self.agent_start_pos = agent_start_pos
-        self.agent_start_dir = agent_start_dir
+        self.rand_agent_start_dir = agent_start_dir is None
+        self.agent_start_dir = np.random.randint(0, 4) if agent_start_dir is None else agent_start_dir
         self.mission = custom_mission
+
+    def reset(self, **kwargs):
+        """
+        Resets the environment for a new episode. If agent_start_dir was initially None,
+        it randomizes the agent's starting direction again.
+        """
+        # Randomize the starting direction again if it was initialized as random
+        if self.rand_agent_start_dir:
+            self.agent_start_dir = np.random.randint(0, 4)
+        # Proceed with the standard reset process
+        return super().reset(**kwargs)
 
     def determine_layout_size(self) -> int:
         """
