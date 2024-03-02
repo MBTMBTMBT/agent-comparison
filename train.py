@@ -1,7 +1,6 @@
 import gymnasium
 import torch
 import torchvision.transforms as transforms
-import numpy as np
 from minigrid.wrappers import FullyObsWrapper, RGBImgObsWrapper
 from minigrid_custom_env import CustomEnvFromFile
 from abstract_agent import AbstractAgent
@@ -84,13 +83,14 @@ def run_training(
         obs, _ = env.reset()  # Reset the environment at the start of each episode.
         rendered = env.render()
         state = preprocess_image(rendered, rotate=False)  # Preprocess the observation for the agent.
+        state_rotated = preprocess_image(rendered, rotate=True)
         # state_img = obs['image']  # Store the original 'image' observation for visualization.
         # episode_states, episode_actions, episode_rewards, episode_log_probs = [], [], [], []
 
         for time in range(env.max_steps):
             time_step += 1
 
-            action = agent.select_action(state, return_distribution=False)  # Agent selects an action based on the current state.
+            action = agent.select_action(state_rotated, return_distribution=False)  # Agent selects an action based on the current state.
             next_obs, reward, terminated, truncated, info = env.step(action)  # Execute the action.
             done = terminated or truncated  # Check if the episode has ended.
             # saving reward and is_terminals
@@ -99,7 +99,9 @@ def run_training(
             trajectory.append((rendered, action))  # Append the step for the GIF.
             rendered = env.render()
             next_state = preprocess_image(rendered, rotate=False)  # Preprocess the new observation.
+            next_state_rotated = preprocess_image(rendered, rotate=True)
             state = next_state  # Update the current state for the next iteration.
+            state_rotated = next_state_rotated
             total_reward += reward
             rewards.append(reward)
 
@@ -126,7 +128,7 @@ if __name__ == "__main__":
 
     ####### initialize environment hyperparameters ######
     has_continuous_action_space = False
-    max_ep_len = 1024  # max timesteps in one episode
+    max_ep_len = 512  # max timesteps in one episode
     max_training_timesteps = int(1e5)  # break training loop if timeteps > max_training_timesteps
     print_freq = max_ep_len * 4  # print avg reward in the interval (in num timesteps)
     log_freq = max_ep_len * 2  # log avg reward in the interval (in num timesteps)
@@ -136,13 +138,14 @@ if __name__ == "__main__":
 
     ################ PPO hyperparameters ################
     update_timestep = max_ep_len * 4  # update policy every n timesteps
-    K_epochs = 40  # update policy for K epochs
+    K_epochs = 10  # update policy for K epochs
     batch_size = 32
+    replay_size = max_ep_len
     eps_clip = 0.05  # clip parameter for PPO
     gamma = 0.99  # discount factor
-    lr_encoder = 0.001  # learning rate for encoder network
-    lr_actor = 0.003  # learning rate for actor network
-    lr_critic = 0.005  # learning rate for critic network
+    lr_encoder = 0.0005  # learning rate for encoder network
+    lr_actor = 0.0003  # learning rate for actor network
+    lr_critic = 0.0005  # learning rate for critic network
     input_channels = 3  # RGB input
     state_dim = 512  # lenth of the vector encoded by encoder
     action_dim = len(ACTION_NAMES)  # actions
@@ -167,14 +170,17 @@ if __name__ == "__main__":
         # Add more file paths as needed
     ]
 
+    for _ in range(10):
+        environment_files += environment_files
+
     # Training settings
     episodes_per_env = {
-        'simple_test_corridor_mini.txt': 500,
-        'simple_test_corridor.txt': 500,
-        'simple_test_corridor_long.txt': 500,
-        'simple_test_openspace.txt': 500,
-        'simple_test_maze_small.txt': 500,
-        'simple_test_door_key.txt': 500,
+        'simple_test_corridor_mini.txt': 10,
+        'simple_test_corridor.txt': 10,
+        'simple_test_corridor_long.txt': 10,
+        'simple_test_openspace.txt': 10,
+        'simple_test_maze_small.txt': 10,
+        'simple_test_door_key.txt': 10,
         # Define episodes for more environments as needed
     }
 
@@ -185,6 +191,7 @@ if __name__ == "__main__":
         gamma,
         K_epochs,
         batch_size,
+        replay_size,
         eps_clip,
         has_continuous_action_space,
         device=device
