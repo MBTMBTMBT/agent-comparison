@@ -232,7 +232,7 @@ class PPO (AbstractAgent):
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
-            self.buffer.state_values.append(state_val)
+            self.buffer.state_values.append(torch.squeeze(state_val, dim=1))
 
             if return_distribution:
                 return action.item(), action_logprob
@@ -246,18 +246,19 @@ class PPO (AbstractAgent):
         for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
             if is_terminal:
                 discounted_reward = 0
-            discounted_reward = reward + (self.gamma * discounted_reward)
+            discounted_reward = (reward + (self.gamma * discounted_reward)) / len(self.buffer.rewards)
             rewards.insert(0, discounted_reward)
 
         # Normalizing the rewards
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+        rewards = torch.where(torch.isnan(rewards), torch.zeros_like(rewards), rewards)
 
         # Convert list to tensor and ensure minimum size
-        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
-        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
-        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
-        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0), dim=1).detach().to(self.device)
+        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0), dim=1).detach().to(self.device)
+        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0), dim=1).detach().to(self.device)
+        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0), dim=1).detach().to(self.device)
 
         # Function to repeat tensor until it reaches the desired size
         def repeat_tensor_to_size(tensor, target_size, dim=0):
@@ -266,18 +267,18 @@ class PPO (AbstractAgent):
             repeated_tensor = tensor.repeat(repeat_times, *[1] * (tensor.dim() - 1))  # Repeat tensor
             return repeated_tensor[:target_size]  # Trim excess
 
-        # Ensure all tensors are at least self.replay_size in the first dimension
-        old_states = repeat_tensor_to_size(old_states, self.replay_size)
-        old_actions = repeat_tensor_to_size(old_actions, self.replay_size)
-        old_logprobs = repeat_tensor_to_size(old_logprobs, self.replay_size)
-        old_state_values = repeat_tensor_to_size(old_state_values, self.replay_size)
-        rewards = repeat_tensor_to_size(rewards, self.replay_size)
-        advantages = rewards.detach() - old_state_values.detach()
-
         try:
+            # Ensure all tensors are at least self.replay_size in the first dimension
+            old_states = repeat_tensor_to_size(old_states, self.replay_size)
+            old_actions = repeat_tensor_to_size(old_actions, self.replay_size)
+            old_logprobs = repeat_tensor_to_size(old_logprobs, self.replay_size)
+            old_state_values = repeat_tensor_to_size(old_state_values, self.replay_size)
+            rewards = repeat_tensor_to_size(rewards, self.replay_size)
+            advantages = rewards.detach() - old_state_values.detach()
+
             # Recalculate advantages if necessary
             advantages = repeat_tensor_to_size(advantages, self.replay_size)
-        except Exception as e:
+        except IndexError:
             self.buffer.clear()
             return
 
