@@ -146,4 +146,3 @@ class DiscretePrioritizedReplayBuffer(Dataset):
             return self.output_capacity
         else:
             return len(self.output_buffer)
-
