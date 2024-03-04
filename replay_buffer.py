@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 import random
+from torchvision import transforms
 
 
 class DiscreteSample:
@@ -11,14 +12,14 @@ class DiscreteSample:
             log_prob: torch.Tensor,
             reward: torch.Tensor,
             advantage: torch.Tensor,
-            priority: float = 0.0,
+            priority: float = 1e-7,
     ):
         self.state: torch.Tensor = state.to(torch.device('cpu'))
         self.action: torch.Tensor = action.to(torch.device('cpu'))
         self.log_prob: torch.Tensor = log_prob.to(torch.device('cpu'))
         self.reward: torch.Tensor = reward.to(torch.device('cpu'))
         self.advantage: torch.Tensor = advantage.to(torch.device('cpu'))
-        self.priority: float = priority
+        self.priority: float = abs(priority) + 1e-7
         self.used: bool = False
 
     def use(self) -> None:
@@ -38,7 +39,7 @@ def weighted_sample_selection(
         # Calculate inverse weights: subtract each sample's priority from the max priority and take the absolute,
         # making lower numerical priorities have higher weight
         max_priority = max(sample.priority for sample in samples)
-        weights = [abs(max_priority - sample.priority) + 1 for sample in samples]  # Add 1 to avoid weight of 0
+        weights = [abs(max_priority - sample.priority) for sample in samples]
     else:
         # Use the original priorities as weights
         weights = [sample.priority for sample in samples]
@@ -75,7 +76,9 @@ class DiscretePrioritizedReplayBuffer(Dataset):
             output_capacity: int,
             total_capacity: int,
             random_rotate: bool = True,
+            image_size: tuple[int, int] = (192, 192)
     ):
+        self.image_size = image_size
         self.output_capacity = output_capacity
         self.total_capacity = total_capacity
         self.random_rotate = random_rotate
@@ -131,6 +134,13 @@ class DiscretePrioritizedReplayBuffer(Dataset):
         old_log_prob = sample.log_prob
         advantage = sample.advantage
         reward = sample.reward
+        # Resize transformation
+        resize_transform = transforms.Compose([
+            transforms.ToPILImage(),  # Convert the tensor to a PIL image
+            transforms.Resize(self.image_size),  # Resize the image
+            transforms.ToTensor()  # Convert back to tensor
+        ])
+        old_state = resize_transform(old_state)
         if self.random_rotate:
             # Pick a random number of 90-degree rotations (0, 1, 2, or 3 times)
             k = random.choice([1, 2, 3])  # 0 is excluded since it would mean no rotation
