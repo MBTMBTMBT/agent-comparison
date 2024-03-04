@@ -10,18 +10,14 @@ class DiscreteSample:
             action: torch.Tensor,
             log_prob: torch.Tensor,
             reward: torch.Tensor,
-            state_value: torch.Tensor,
             advantage: torch.Tensor,
-            done: bool,
             priority: float = 0.0,
     ):
         self.state: torch.Tensor = state.to(torch.device('cpu'))
         self.action: torch.Tensor = action.to(torch.device('cpu'))
         self.log_prob: torch.Tensor = log_prob.to(torch.device('cpu'))
         self.reward: torch.Tensor = reward.to(torch.device('cpu'))
-        self.state_value: torch.Tensor = state_value.to(torch.device('cpu'))
         self.advantage: torch.Tensor = advantage.to(torch.device('cpu'))
-        self.done: bool = done
         self.priority: float = priority
         self.used: bool = False
 
@@ -92,14 +88,15 @@ class DiscretePrioritizedReplayBuffer(Dataset):
             action: torch.Tensor,
             log_prob: torch.Tensor,
             reward: torch.Tensor,
-            state_value: torch.Tensor,
             advantage: torch.Tensor,
-            done: bool,
             priority: float = 0.0,
     ) -> int:
-        sample = DiscreteSample(state, action, log_prob, reward, state_value, advantage, done, priority)
+        sample = DiscreteSample(state, action, log_prob, reward, advantage, priority)
         self.base_buffer.append(sample)
         return len(self.base_buffer)
+
+    def is_full(self) -> bool:
+        return len(self.base_buffer) >= self.total_capacity
 
     def refresh_output_buffer(self) -> bool:
         selected, remained = weighted_sample_selection(self.base_buffer, self.output_capacity)
@@ -139,7 +136,7 @@ class DiscretePrioritizedReplayBuffer(Dataset):
             k = random.choice([1, 2, 3])  # 0 is excluded since it would mean no rotation
             # Rotate the image by 90 degrees 'k' times
             old_state = torch.rot90(old_state, k, [1, 2])  # Rotates on the plane of the last two dimensions (H, W)
-        return old_state, old_action, old_log_prob, advantage, reward
+        return old_state, old_action, old_log_prob, reward, advantage
 
     def __len__(self) -> int:
         if self.output_capacity <= len(self.output_buffer):
