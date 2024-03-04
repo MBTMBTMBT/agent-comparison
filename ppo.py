@@ -7,6 +7,8 @@ from abstract_agent import AbstractAgent
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 
+from replay_buffer import DiscretePrioritizedReplayBuffer
+
 
 class RolloutBuffer:
     def __init__(self):
@@ -260,13 +262,6 @@ class PPO (AbstractAgent):
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0), dim=1).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0), dim=1).detach().to(self.device)
 
-        # Function to repeat tensor until it reaches the desired size
-        def repeat_tensor_to_size(tensor, target_size, dim=0):
-            repeat_times = (target_size + tensor.size(dim) - 1) // tensor.size(
-                dim)  # Calculate how many times to repeat
-            repeated_tensor = tensor.repeat(repeat_times, *[1] * (tensor.dim() - 1))  # Repeat tensor
-            return repeated_tensor[:target_size]  # Trim excess
-
         try:
             # Ensure all tensors are at least self.replay_size in the first dimension
             old_states = repeat_tensor_to_size(old_states, self.replay_size)
@@ -344,6 +339,52 @@ class PPO (AbstractAgent):
         # clear buffer
         self.buffer.clear()
 
+    def charge_replay_buffer(self, replay_buffer: DiscretePrioritizedReplayBuffer) -> int:
+        # Monte Carlo estimate of returns
+        rewards = []
+        discounted_reward = 0
+        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+            if is_terminal:
+                discounted_reward = 0
+            discounted_reward = (reward + (self.gamma * discounted_reward)) / len(self.buffer.rewards)
+            rewards.insert(0, discounted_reward)
+
+        # Normalizing the rewards
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+        rewards = torch.where(torch.isnan(rewards), torch.zeros_like(rewards), rewards)
+
+        # Convert list to tensor and ensure minimum size
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0), dim=1).detach().to(self.device)
+        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0), dim=1).detach().to(self.device)
+        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0), dim=1).detach().to(self.device)
+        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0), dim=1).detach().to(self.device)
+
+        # Ensure all tensors are at least self.replay_size in the first dimension
+        old_states = repeat_tensor_to_size(old_states, self.replay_size)
+        old_actions = repeat_tensor_to_size(old_actions, self.replay_size)
+        old_logprobs = repeat_tensor_to_size(old_logprobs, self.replay_size)
+        old_state_values = repeat_tensor_to_size(old_state_values, self.replay_size)
+        rewards = repeat_tensor_to_size(rewards, self.replay_size)
+        advantages = rewards.detach() - old_state_values.detach()
+
+        # Recalculate advantages if necessary
+        advantages = repeat_tensor_to_size(advantages, self.replay_size)
+
+        # Creating dataset and dataloader for mini-batch processing
+        dataset = TensorDataset(old_states, old_actions, old_logprobs, rewards, advantages)
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+
+        for old_states_batch, old_actions_batch, old_logprobs_batch, rewards_batch, advantages_batch in dataloader:
+            old_state = torch.squeeze(old_states_batch, dim=0)
+            old_action = torch.squeeze(old_actions_batch, dim=0)
+            old_logprob = torch.squeeze(old_logprobs_batch, dim=0)
+            advantage = torch.squeeze(advantages_batch, dim=0)
+            reward = torch.squeeze(rewards_batch, dim=0)
+            replay_buffer.add(old_state, old_action, old_logprob, reward, advantage, priority=float(reward))
+
+        return replay_buffer.is_full()
+
     def save_model(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
 
@@ -368,6 +409,14 @@ class PPO (AbstractAgent):
         self.policy.load_state_dict(checkpoint['model'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         return checkpoint['counter'], checkpoint['performance']
+
+
+# Function to repeat tensor until it reaches the desired size
+def repeat_tensor_to_size(tensor, target_size, dim=0):
+    repeat_times = (target_size + tensor.size(dim) - 1) // tensor.size(
+        dim)  # Calculate how many times to repeat
+    repeated_tensor = tensor.repeat(repeat_times, *[1] * (tensor.dim() - 1))  # Repeat tensor
+    return repeated_tensor[:target_size]  # Trim excess
 
 
 class PPOWithImageEncoder(PPO):
