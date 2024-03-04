@@ -33,7 +33,7 @@ class CustomEnvFromFile(MiniGridEnv):
             self,
             txt_file_path: str,
             size: Optional[int] = None,
-            agent_start_pos: tuple[int, int] = (1, 1),
+            agent_start_pos: Optional[tuple[int, int]] = None,  # Allow None for random initialization
             agent_start_dir: Optional[int] = None,  # Allow None for random initialization
             custom_mission: str = "Explore and interact with objects.",
             max_steps: Optional[int] = None,
@@ -55,21 +55,19 @@ class CustomEnvFromFile(MiniGridEnv):
             max_steps=max_steps or 4 * self.layout_size ** 2,
             **kwargs,
         )
+        self.rand_agent_start_pos = agent_start_pos is None
         self.agent_start_pos = agent_start_pos
         self.rand_agent_start_dir = agent_start_dir is None
-        self.agent_start_dir = np.random.randint(0, 4) if agent_start_dir is None else agent_start_dir
+        self.agent_start_dir = agent_start_dir
         self.mission = custom_mission
 
-    def reset(self, **kwargs):
-        """
-        Resets the environment for a new episode. If agent_start_dir was initially None,
-        it randomizes the agent's starting direction again.
-        """
-        # Randomize the starting direction again if it was initialized as random
-        if self.rand_agent_start_dir:
-            self.agent_start_dir = np.random.randint(0, 4)
-        # Proceed with the standard reset process
-        return super().reset(**kwargs)
+    # def reset(self, **kwargs):
+    #     """
+    #     Resets the environment for a new episode. If agent_start_dir was initially None,
+    #     it randomizes the agent's starting direction again.
+    #     """
+    #     # Proceed with the standard reset process
+    #     return super().reset(**kwargs)
 
     def determine_layout_size(self) -> int:
         """
@@ -81,9 +79,10 @@ class CustomEnvFromFile(MiniGridEnv):
         with open(self.txt_file_path, 'r') as file:
             sections = file.read().split('\n\n')
             layout_lines = sections[0].strip().split('\n')
-            height = len(layout_lines)
-            width = max(len(line) for line in layout_lines)
-            return max(width, height)
+            # Set the environment's width and height based on the layout
+            self.height = len(layout_lines)
+            self.width = max(len(line) for line in layout_lines)
+            return max(self.height, self.width)
 
     def _gen_grid(self, width: int, height: int) -> None:
         """
@@ -91,6 +90,11 @@ class CustomEnvFromFile(MiniGridEnv):
         """
         self.grid = Grid(width, height)
         self.read_layout_from_file()
+        # Randomize the starting direction again if it was initialized as random
+        if self.rand_agent_start_dir:
+            self.agent_start_dir = np.random.randint(0, 4)
+        if self.rand_agent_start_pos:
+            self.agent_start_pos = self.find_empty_position()
         self.agent_pos = self.agent_start_pos
         self.agent_dir = self.agent_start_dir
 
@@ -115,6 +119,21 @@ class CustomEnvFromFile(MiniGridEnv):
                     obj = self.char_to_object(char, color)
                     if obj:
                         self.grid.set(x, y, obj)  # Place the object on the grid
+
+    def find_empty_position(self) -> tuple[int, int]:
+        """
+        Finds an empty position on the grid where there is no object.
+
+        Returns:
+            tuple[int, int]: The coordinates of an empty position.
+        """
+        empty_positions = [(x, y) for x in range(self.width) for y in range(self.height)
+                           if self.grid.get(x, y) is None]
+        if not empty_positions:
+            raise ValueError("No empty position available on the grid.")
+        # Use random.randint to select an index and then retrieve the position
+        index = np.random.randint(0, len(empty_positions))
+        return empty_positions[index]
 
     def char_to_color(self, char: str) -> Optional[str]:
         """
