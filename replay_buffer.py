@@ -15,12 +15,12 @@ class DiscreteSample:
             done: bool,
             priority: float = 0.0,
     ):
-        self.state: torch.Tensor = state
-        self.action: torch.Tensor = action
-        self.log_prob: torch.Tensor = log_prob
-        self.reward: torch.Tensor = reward
-        self.state_value: torch.Tensor = state_value
-        self.advantage: torch.Tensor = advantage
+        self.state: torch.Tensor = state.to(torch.device('cpu'))
+        self.action: torch.Tensor = action.to(torch.device('cpu'))
+        self.log_prob: torch.Tensor = log_prob.to(torch.device('cpu'))
+        self.reward: torch.Tensor = reward.to(torch.device('cpu'))
+        self.state_value: torch.Tensor = state_value.to(torch.device('cpu'))
+        self.advantage: torch.Tensor = advantage.to(torch.device('cpu'))
         self.done: bool = done
         self.priority: float = priority
         self.used: bool = False
@@ -134,6 +134,11 @@ class DiscretePrioritizedReplayBuffer(Dataset):
         old_log_prob = sample.log_prob
         advantage = sample.advantage
         reward = sample.reward
+        if self.random_rotate:
+            # Pick a random number of 90-degree rotations (0, 1, 2, or 3 times)
+            k = random.choice([1, 2, 3])  # 0 is excluded since it would mean no rotation
+            # Rotate the image by 90 degrees 'k' times
+            old_state = torch.rot90(old_state, k, [1, 2])  # Rotates on the plane of the last two dimensions (H, W)
         return old_state, old_action, old_log_prob, advantage, reward
 
     def __len__(self) -> int:
