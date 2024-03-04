@@ -39,7 +39,7 @@ def weighted_sample_selection(
         # Calculate inverse weights: subtract each sample's priority from the max priority and take the absolute,
         # making lower numerical priorities have higher weight
         max_priority = max(sample.priority for sample in samples)
-        weights = [abs(max_priority - sample.priority) for sample in samples]
+        weights = [abs(max_priority - sample.priority + 1) for sample in samples]
     else:
         # Use the original priorities as weights
         weights = [sample.priority for sample in samples]
