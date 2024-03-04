@@ -385,6 +385,59 @@ class PPO (AbstractAgent):
 
         return replay_buffer.is_full()
 
+    def update_with_replay_buffer(self, replay_buffer: DiscretePrioritizedReplayBuffer):
+        dataloader = DataLoader(replay_buffer, batch_size=self.batch_size, shuffle=True)
+        # Optimize policy for K epochs
+        for epoch in tqdm(range(self.K_epochs), desc='Epochs'):
+            # Initialize variables to track progress within an epoch
+            epoch_loss = 0.0
+            epoch_surr1 = 0.0
+            epoch_surr2 = 0.0
+            epoch_entropy = 0.0
+            batch_count = 0
+
+            for old_states_batch, old_actions_batch, old_logprobs_batch, advantages_batch, rewards_batch in dataloader:
+                # Evaluating old actions and values for the mini-batch
+                logprobs, state_values, dist_entropy = self.policy.evaluate(old_states_batch, old_actions_batch)
+
+                # Match state_values tensor dimensions with rewards tensor for the mini-batch
+                state_values = torch.squeeze(state_values)
+
+                # Finding the ratio (pi_theta / pi_theta__old) for the mini-batch
+                ratios = torch.exp(logprobs - old_logprobs_batch.detach())
+
+                # Finding Surrogate Loss for the mini-batch
+                surr1 = ratios * advantages_batch
+                surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages_batch
+
+                # Final loss of clipped objective PPO for the mini-batch
+                loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards_batch) - 0.01 * dist_entropy
+
+                # Take gradient step
+                self.optimizer.zero_grad()
+                loss.mean().backward()
+                self.optimizer.step()
+
+                # Update epoch tracking variables
+                epoch_loss += loss.mean().item()
+                epoch_surr1 += surr1.mean().item()
+                epoch_surr2 += surr2.mean().item()
+                epoch_entropy += dist_entropy.mean().item()
+                batch_count += 1
+
+            # Calculate averages for the epoch
+            avg_epoch_loss = epoch_loss / batch_count
+            avg_epoch_surr1 = epoch_surr1 / batch_count
+            avg_epoch_surr2 = epoch_surr2 / batch_count
+            avg_epoch_entropy = epoch_entropy / batch_count
+
+            # Display detailed information for the epoch
+            # tqdm.write(
+            #     f'Epoch {epoch + 1}/{self.K_epochs} - Loss: {avg_epoch_loss:.4f}, Surr1: {avg_epoch_surr1:.4f}, Surr2: {avg_epoch_surr2:.4f}, Entropy: {avg_epoch_entropy:.4f}')
+
+        # Copy new weights into old policy
+        self.policy_old.load_state_dict(self.policy.state_dict())
+
     def save_model(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
 
