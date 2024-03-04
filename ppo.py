@@ -127,12 +127,14 @@ class FlexibleImageEncoder(nn.Module):
         self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512, output_size)
         self.squeezenet.classifier = nn.Identity()
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.squeezenet.features(x)
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
+        x = self.sigmoid(x)
         return x
 
 
@@ -381,14 +383,17 @@ class PPO (AbstractAgent):
             old_logprob = torch.squeeze(old_logprobs_batch, dim=0)
             advantage = torch.squeeze(advantages_batch, dim=0)
             reward = torch.squeeze(rewards_batch, dim=0)
-            replay_buffer.add(old_state, old_action, old_logprob, reward, advantage, priority=float(reward))
+            replay_buffer.add(old_state, old_action, old_logprob, reward, advantage, priority=1)
+
+        self.buffer.clear()
 
         return replay_buffer.is_full()
 
     def update_with_replay_buffer(self, replay_buffer: DiscretePrioritizedReplayBuffer):
-        dataloader = DataLoader(replay_buffer, batch_size=self.batch_size, shuffle=True)
+        dataloader = DataLoader(replay_buffer, batch_size=self.batch_size, shuffle=True, num_workers=8)
         # Optimize policy for K epochs
-        for epoch in tqdm(range(self.K_epochs), desc='Epochs'):
+        for epoch in range(self.K_epochs):
+            print("Epoch", epoch, "/", self.K_epochs)
             # Initialize variables to track progress within an epoch
             epoch_loss = 0.0
             epoch_surr1 = 0.0
@@ -396,7 +401,13 @@ class PPO (AbstractAgent):
             epoch_entropy = 0.0
             batch_count = 0
 
-            for old_states_batch, old_actions_batch, old_logprobs_batch, advantages_batch, rewards_batch in dataloader:
+            for old_states_batch, old_actions_batch, old_logprobs_batch, advantages_batch, rewards_batch in tqdm(dataloader):
+                old_states_batch = old_states_batch.to(self.device)
+                old_actions_batch = old_actions_batch.to(self.device)
+                old_logprobs_batch = old_logprobs_batch.to(self.device)
+                advantages_batch = advantages_batch.to(self.device)
+                rewards_batch = rewards_batch.to(self.device)
+
                 # Evaluating old actions and values for the mini-batch
                 logprobs, state_values, dist_entropy = self.policy.evaluate(old_states_batch, old_actions_batch)
 
