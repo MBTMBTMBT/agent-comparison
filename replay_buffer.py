@@ -113,7 +113,7 @@ class DiscretePrioritizedReplayBuffer(Dataset):
         self.output_buffer = selected
         self.base_buffer = selected + remained
         if len(selected) < self.output_capacity:
-            print("Warning: Not enough samples to fill replay buffer.")
+            print("Warning: Not enough samples to fill replay buffer: Actual samples: %d / Expected samples: %d" % (len(self.base_buffer), self.total_capacity))
             return False
         return True
 
@@ -124,11 +124,14 @@ class DiscretePrioritizedReplayBuffer(Dataset):
         self.base_buffer = remained
         del selected
         if len(self.base_buffer) > self.total_capacity:
-            print("Warning: Base buffer is still oversize.")
+            print("Warning: Base buffer is still oversize: Actual samples: %d / Expected samples: %d" % (len(self.base_buffer), self.total_capacity))
+            if len(self.base_buffer) > self.total_capacity * 2:
+                print("The oversize buffer is more than twice big as expected, throwing unused memory!")
+                self.strictly_shrink_base_buffer()
             return False
         return True
 
-    def strict_shrink_base_buffer(self) -> None:
+    def strictly_shrink_base_buffer(self) -> None:
         selected, remained = weighted_sample_selection(
             self.base_buffer, len(self.base_buffer) - self.total_capacity, invert_priority=True, used_only=False,
         )
