@@ -94,6 +94,13 @@ class DiscretePrioritizedReplayBuffer(Dataset):
             advantage: torch.Tensor,
             priority: float = 0.0,
     ) -> int:
+        # Resize transformation
+        resize_transform = transforms.Compose([
+            transforms.ToPILImage(),  # Convert the tensor to a PIL image
+            transforms.Resize(self.image_size),  # Resize the image
+            transforms.ToTensor()  # Convert back to tensor
+        ])
+        state = resize_transform(state)
         sample = DiscreteSample(state, action, log_prob, reward, advantage, priority)
         self.base_buffer.append(sample)
         return len(self.base_buffer)
@@ -115,6 +122,7 @@ class DiscretePrioritizedReplayBuffer(Dataset):
             self.base_buffer, len(self.base_buffer) - self.total_capacity, invert_priority=True, used_only=True,
         )
         self.base_buffer = remained
+        del selected
         if len(self.base_buffer) > self.total_capacity:
             print("Warning: Base buffer is still oversize.")
             return False
@@ -134,13 +142,6 @@ class DiscretePrioritizedReplayBuffer(Dataset):
         old_log_prob = sample.log_prob
         advantage = sample.advantage
         reward = sample.reward
-        # Resize transformation
-        resize_transform = transforms.Compose([
-            transforms.ToPILImage(),  # Convert the tensor to a PIL image
-            transforms.Resize(self.image_size),  # Resize the image
-            transforms.ToTensor()  # Convert back to tensor
-        ])
-        old_state = resize_transform(old_state)
         if self.random_rotate:
             # Pick a random number of 90-degree rotations (0, 1, 2, or 3 times)
             k = random.choice([1, 2, 3])  # 0 is excluded since it would mean no rotation
