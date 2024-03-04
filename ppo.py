@@ -120,16 +120,16 @@ class ActorCritic(nn.Module):
 class FlexibleImageEncoder(nn.Module):
     def __init__(self, input_channels, output_size):
         super(FlexibleImageEncoder, self).__init__()
-        self.resnet = models.resnet18(pretrained=True)
-        self.resnet.conv1 = nn.Conv2d(input_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        # self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(self.resnet.fc.in_features, output_size)
-        self.resnet.fc = nn.Identity()
+        self.squeezenet = models.squeezenet1_0(pretrained=True)
+        self.squeezenet.features[0] = nn.Conv2d(input_channels, 96, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512, output_size)
+        self.squeezenet.classifier = nn.Identity()
 
     def forward(self, x):
-        x = self.resnet(x)
-        # x = self.adapt_pool(x)
-        # x = torch.flatten(x, 1)
+        x = self.squeezenet.features(x)
+        x = self.adapt_pool(x)
+        x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
 
