@@ -125,8 +125,8 @@ class DiscretePrioritizedReplayBuffer(Dataset):
         del selected
         if len(self.base_buffer) > self.total_capacity:
             print("Warning: Base buffer is still oversize: Actual samples: %d / Expected samples: %d" % (len(self.base_buffer), self.total_capacity))
-            if len(self.base_buffer) > self.total_capacity * 2:
-                print("The oversize buffer is more than twice big as expected, throwing unused memory!")
+            if len(self.base_buffer) > self.total_capacity * 1.5:
+                print("The oversize buffer is more than 1.5 times big as expected, throwing unused memory!")
                 self.strictly_shrink_base_buffer()
             return False
         return True
