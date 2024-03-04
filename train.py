@@ -143,7 +143,7 @@ if __name__ == "__main__":
     replay_size = max_ep_len
     eps_clip = 0.05  # clip parameter for PPO
     gamma = 0.99  # discount factor
-    lr_encoder = 0.0005  # learning rate for encoder network
+    lr_encoder = 0.005  # learning rate for encoder network
     lr_actor = 0.0003  # learning rate for actor network
     lr_critic = 0.0005  # learning rate for critic network
     input_channels = 3  # RGB input
@@ -161,12 +161,12 @@ if __name__ == "__main__":
 
     # List of environments to train on
     environment_files = [
-        'simple_test_corridor_mini.txt',
-        'simple_test_corridor.txt',
-        'simple_test_corridor_long.txt',
+        # 'simple_test_corridor_mini.txt',
+        # 'simple_test_corridor.txt',
+        # 'simple_test_corridor_long.txt',
         'simple_test_openspace.txt',
-        'simple_test_maze_small.txt',
-        'simple_test_door_key.txt',
+        # 'simple_test_maze_small.txt',
+        # 'simple_test_door_key.txt',
         # Add more file paths as needed
     ]
 
@@ -175,12 +175,12 @@ if __name__ == "__main__":
 
     # Training settings
     episodes_per_env = {
-        'simple_test_corridor_mini.txt': 10,
-        'simple_test_corridor.txt': 10,
-        'simple_test_corridor_long.txt': 10,
-        'simple_test_openspace.txt': 10,
-        'simple_test_maze_small.txt': 10,
-        'simple_test_door_key.txt': 10,
+        # 'simple_test_corridor_mini.txt': 500,
+        # 'simple_test_corridor.txt': 10,
+        # 'simple_test_corridor_long.txt': 10,
+        'simple_test_openspace.txt': 500,
+        # 'simple_test_maze_small.txt': 10,
+        # 'simple_test_door_key.txt': 10,
         # Define episodes for more environments as needed
     }
 
