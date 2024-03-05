@@ -7,6 +7,8 @@ from abstract_agent import AbstractAgent
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 
+from replay_buffer import DiscretePrioritizedReplayBuffer
+
 
 class RolloutBuffer:
     def __init__(self):
@@ -40,30 +42,29 @@ class ActorCritic(nn.Module):
         if has_continuous_action_space :
             self.actor = nn.Sequential(
                 nn.Linear(state_dim, 64),
-                nn.Tanh(),
+                nn.LeakyReLU(),
                 nn.Linear(64, 64),
-                nn.Tanh(),
+                nn.LeakyReLU(),
                 nn.Linear(64, action_dim),
-                nn.Tanh()
+                nn.LeakyReLU()
             )
         else:
             self.actor = nn.Sequential(
-                nn.Linear(state_dim, 64),
-                nn.Tanh(),
-                nn.Linear(64, 64),
-                nn.Tanh(),
-                nn.Linear(64, action_dim),
+                nn.Linear(state_dim, 128),
+                nn.LeakyReLU(),
+                # nn.Linear(1024, 512),
+                # nn.LeakyReLU(),
+                nn.Linear(128, action_dim),
                 nn.Softmax(dim=-1)
             )
 
-
         # critic
         self.critic = nn.Sequential(
-            nn.Linear(state_dim, 64),
-            nn.Tanh(),
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, 1)
+            nn.Linear(state_dim, 128),
+            nn.LeakyReLU(),
+            # nn.Linear(1024, 512),
+            # nn.LeakyReLU(),
+            nn.Linear(128, 1)
         )
 
     def set_action_std(self, new_action_std):
@@ -120,17 +121,19 @@ class ActorCritic(nn.Module):
 class FlexibleImageEncoder(nn.Module):
     def __init__(self, input_channels, output_size):
         super(FlexibleImageEncoder, self).__init__()
-        self.resnet = models.resnet18(pretrained=True)
-        self.resnet.conv1 = nn.Conv2d(input_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        # self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(self.resnet.fc.in_features, output_size)
-        self.resnet.fc = nn.Identity()
+        self.squeezenet = models.squeezenet1_0(pretrained=False)
+        self.squeezenet.features[0] = nn.Conv2d(input_channels, 96, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512, output_size)
+        self.squeezenet.classifier = nn.Identity()
+        self.tanh = nn.Tanh()
 
     def forward(self, x):
-        x = self.resnet(x)
-        # x = self.adapt_pool(x)
-        # x = torch.flatten(x, 1)
+        x = self.squeezenet.features(x)
+        x = self.adapt_pool(x)
+        x = torch.flatten(x, 1)
         x = self.fc(x)
+        x = self.tanh(x)
         return x
 
 
@@ -211,7 +214,6 @@ class PPO (AbstractAgent):
         print("--------------------------------------------------------------------------------------------")
 
     def select_action(self, state, return_distribution=True):
-
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = torch.FloatTensor(state).to(self.device)
@@ -259,13 +261,6 @@ class PPO (AbstractAgent):
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0), dim=1).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0), dim=1).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0), dim=1).detach().to(self.device)
-
-        # Function to repeat tensor until it reaches the desired size
-        def repeat_tensor_to_size(tensor, target_size, dim=0):
-            repeat_times = (target_size + tensor.size(dim) - 1) // tensor.size(
-                dim)  # Calculate how many times to repeat
-            repeated_tensor = tensor.repeat(repeat_times, *[1] * (tensor.dim() - 1))  # Repeat tensor
-            return repeated_tensor[:target_size]  # Trim excess
 
         try:
             # Ensure all tensors are at least self.replay_size in the first dimension
@@ -344,6 +339,114 @@ class PPO (AbstractAgent):
         # clear buffer
         self.buffer.clear()
 
+    def charge_replay_buffer(self, replay_buffer: DiscretePrioritizedReplayBuffer) -> int:
+        # Monte Carlo estimate of returns
+        rewards = []
+        discounted_reward = 0
+        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+            if is_terminal:
+                discounted_reward = 0
+            discounted_reward = (reward + (self.gamma * discounted_reward))  # / len(self.buffer.rewards)
+            rewards.insert(0, discounted_reward)
+
+        # Normalizing the rewards
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7) if len(rewards) > 1 else rewards
+        rewards = torch.where(torch.isnan(rewards), torch.zeros_like(rewards), rewards)
+
+        # Convert list to tensor and ensure minimum size
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0), dim=1).detach().to(self.device)
+        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0), dim=1).detach().to(self.device)
+        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0), dim=1).detach().to(self.device)
+        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0), dim=1).detach().to(self.device)
+
+        # Ensure all tensors are at least self.replay_size in the first dimension
+        # old_states = repeat_tensor_to_size(old_states, self.replay_size)
+        # old_actions = repeat_tensor_to_size(old_actions, self.replay_size)
+        # old_logprobs = repeat_tensor_to_size(old_logprobs, self.replay_size)
+        # old_state_values = repeat_tensor_to_size(old_state_values, self.replay_size)
+        # rewards = repeat_tensor_to_size(rewards, self.replay_size)
+        advantages = rewards.detach() - old_state_values.detach()
+
+        # Recalculate advantages if necessary
+        # advantages = repeat_tensor_to_size(advantages, self.replay_size)
+
+        # Creating dataset and dataloader for mini-batch processing
+        dataset = TensorDataset(old_states, old_actions, old_logprobs, rewards, advantages)
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+
+        for old_states_batch, old_actions_batch, old_logprobs_batch, rewards_batch, advantages_batch in dataloader:
+            old_state = torch.squeeze(old_states_batch, dim=0)
+            old_action = torch.squeeze(old_actions_batch, dim=0)
+            old_logprob = torch.squeeze(old_logprobs_batch, dim=0)
+            advantage = torch.squeeze(advantages_batch, dim=0)
+            reward = torch.squeeze(rewards_batch, dim=0)
+            replay_buffer.add(old_state, old_action, old_logprob, reward, advantage, priority=1)
+
+        self.buffer.clear()
+
+        return replay_buffer.is_full()
+
+    def update_with_replay_buffer(self, replay_buffer: DiscretePrioritizedReplayBuffer):
+        dataloader = DataLoader(replay_buffer, batch_size=self.batch_size, shuffle=True, num_workers=0)
+        # Optimize policy for K epochs
+        for epoch in range(self.K_epochs):
+            print("Epoch", epoch, "/", self.K_epochs)
+            # Initialize variables to track progress within an epoch
+            epoch_loss = 0.0
+            epoch_surr1 = 0.0
+            epoch_surr2 = 0.0
+            epoch_entropy = 0.0
+            batch_count = 0
+
+            for old_states_batch, old_actions_batch, old_logprobs_batch, advantages_batch, rewards_batch in tqdm(dataloader):
+                old_states_batch = old_states_batch.to(self.device)
+                old_actions_batch = old_actions_batch.to(self.device)
+                old_logprobs_batch = old_logprobs_batch.to(self.device)
+                advantages_batch = advantages_batch.to(self.device)
+                rewards_batch = rewards_batch.to(self.device)
+
+                # Evaluating old actions and values for the mini-batch
+                logprobs, state_values, dist_entropy = self.policy.evaluate(old_states_batch, old_actions_batch)
+
+                # Match state_values tensor dimensions with rewards tensor for the mini-batch
+                state_values = torch.squeeze(state_values)
+
+                # Finding the ratio (pi_theta / pi_theta__old) for the mini-batch
+                ratios = torch.exp(logprobs - old_logprobs_batch.detach())
+
+                # Finding Surrogate Loss for the mini-batch
+                surr1 = ratios * advantages_batch
+                surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages_batch
+
+                # Final loss of clipped objective PPO for the mini-batch
+                loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards_batch) - 0.01 * dist_entropy
+
+                # Take gradient step
+                self.optimizer.zero_grad()
+                loss.mean().backward()
+                self.optimizer.step()
+
+                # Update epoch tracking variables
+                epoch_loss += loss.mean().item()
+                epoch_surr1 += surr1.mean().item()
+                epoch_surr2 += surr2.mean().item()
+                epoch_entropy += dist_entropy.mean().item()
+                batch_count += 1
+
+            # Calculate averages for the epoch
+            avg_epoch_loss = epoch_loss / batch_count
+            avg_epoch_surr1 = epoch_surr1 / batch_count
+            avg_epoch_surr2 = epoch_surr2 / batch_count
+            avg_epoch_entropy = epoch_entropy / batch_count
+
+            # Display detailed information for the epoch
+            # tqdm.write(
+            #     f'Epoch {epoch + 1}/{self.K_epochs} - Loss: {avg_epoch_loss:.4f}, Surr1: {avg_epoch_surr1:.4f}, Surr2: {avg_epoch_surr2:.4f}, Entropy: {avg_epoch_entropy:.4f}')
+
+        # Copy new weights into old policy
+        self.policy_old.load_state_dict(self.policy.state_dict())
+
     def save_model(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
 
@@ -368,6 +471,14 @@ class PPO (AbstractAgent):
         self.policy.load_state_dict(checkpoint['model'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         return checkpoint['counter'], checkpoint['performance']
+
+
+# Function to repeat tensor until it reaches the desired size
+def repeat_tensor_to_size(tensor, target_size, dim=0):
+    repeat_times = (target_size + tensor.size(dim) - 1) // tensor.size(
+        dim)  # Calculate how many times to repeat
+    repeated_tensor = tensor.repeat(repeat_times, *[1] * (tensor.dim() - 1))  # Repeat tensor
+    return repeated_tensor[:target_size]  # Trim excess
 
 
 class PPOWithImageEncoder(PPO):
