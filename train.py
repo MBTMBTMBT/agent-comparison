@@ -197,7 +197,7 @@ if __name__ == "__main__":
     lr_actor = 0.0003  # learning rate for actor network
     lr_critic = 0.0005  # learning rate for critic network
     input_channels = 3  # RGB input
-    state_dim = 512  # lenth of the vector encoded by encoder
+    state_dim = 128  # lenth of the vector encoded by encoder
     action_dim = len(ACTION_NAMES)  # actions
     #####################################################
 
@@ -327,7 +327,7 @@ if __name__ == "__main__":
                 CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len, agent_start_pos=(1,1))))
 
             # Run training for the current environment
-            print(f"Sampling on {env_file}")
+            print(f"Sampling on {env_file}, turn {turn}...")
 
             save_gif = turn % 5 == 4
             if save_gif:
