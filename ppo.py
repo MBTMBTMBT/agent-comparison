@@ -50,21 +50,21 @@ class ActorCritic(nn.Module):
             )
         else:
             self.actor = nn.Sequential(
-                nn.Linear(state_dim, 1024),
+                nn.Linear(state_dim, 128),
                 nn.LeakyReLU(),
-                nn.Linear(1024, 512),
-                nn.LeakyReLU(),
-                nn.Linear(512, action_dim),
+                # nn.Linear(1024, 512),
+                # nn.LeakyReLU(),
+                nn.Linear(128, action_dim),
                 nn.Softmax(dim=-1)
             )
 
         # critic
         self.critic = nn.Sequential(
-            nn.Linear(state_dim, 1024),
+            nn.Linear(state_dim, 128),
             nn.LeakyReLU(),
-            nn.Linear(1024, 512),
-            nn.LeakyReLU(),
-            nn.Linear(512, 1)
+            # nn.Linear(1024, 512),
+            # nn.LeakyReLU(),
+            nn.Linear(128, 1)
         )
 
     def set_action_std(self, new_action_std):
@@ -351,7 +351,7 @@ class PPO (AbstractAgent):
 
         # Normalizing the rewards
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
-        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7) if len(rewards) > 1 else rewards
         rewards = torch.where(torch.isnan(rewards), torch.zeros_like(rewards), rewards)
 
         # Convert list to tensor and ensure minimum size
