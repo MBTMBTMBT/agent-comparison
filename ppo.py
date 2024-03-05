@@ -42,30 +42,29 @@ class ActorCritic(nn.Module):
         if has_continuous_action_space :
             self.actor = nn.Sequential(
                 nn.Linear(state_dim, 64),
-                nn.Tanh(),
+                nn.LeakyReLU(),
                 nn.Linear(64, 64),
-                nn.Tanh(),
+                nn.LeakyReLU(),
                 nn.Linear(64, action_dim),
-                nn.Tanh()
+                nn.LeakyReLU()
             )
         else:
             self.actor = nn.Sequential(
-                nn.Linear(state_dim, 64),
-                nn.Tanh(),
-                nn.Linear(64, 64),
-                nn.Tanh(),
-                nn.Linear(64, action_dim),
+                nn.Linear(state_dim, 1024),
+                nn.LeakyReLU(),
+                nn.Linear(1024, 512),
+                nn.LeakyReLU(),
+                nn.Linear(512, action_dim),
                 nn.Softmax(dim=-1)
             )
 
-
         # critic
         self.critic = nn.Sequential(
-            nn.Linear(state_dim, 64),
-            nn.Tanh(),
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, 1)
+            nn.Linear(state_dim, 1024),
+            nn.LeakyReLU(),
+            nn.Linear(1024, 512),
+            nn.LeakyReLU(),
+            nn.Linear(512, 1)
         )
 
     def set_action_std(self, new_action_std):
@@ -122,19 +121,19 @@ class ActorCritic(nn.Module):
 class FlexibleImageEncoder(nn.Module):
     def __init__(self, input_channels, output_size):
         super(FlexibleImageEncoder, self).__init__()
-        self.squeezenet = models.squeezenet1_0(pretrained=True)
+        self.squeezenet = models.squeezenet1_0(pretrained=False)
         self.squeezenet.features[0] = nn.Conv2d(input_channels, 96, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
         self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512, output_size)
         self.squeezenet.classifier = nn.Identity()
-        self.sigmoid = nn.Sigmoid()
+        self.tanh = nn.Tanh()
 
     def forward(self, x):
         x = self.squeezenet.features(x)
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
-        x = self.sigmoid(x)
+        x = self.tanh(x)
         return x
 
 
@@ -215,7 +214,6 @@ class PPO (AbstractAgent):
         print("--------------------------------------------------------------------------------------------")
 
     def select_action(self, state, return_distribution=True):
-
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = torch.FloatTensor(state).to(self.device)
@@ -348,7 +346,7 @@ class PPO (AbstractAgent):
         for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
             if is_terminal:
                 discounted_reward = 0
-            discounted_reward = (reward + (self.gamma * discounted_reward)) / len(self.buffer.rewards)
+            discounted_reward = (reward + (self.gamma * discounted_reward))  # / len(self.buffer.rewards)
             rewards.insert(0, discounted_reward)
 
         # Normalizing the rewards
@@ -363,15 +361,15 @@ class PPO (AbstractAgent):
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0), dim=1).detach().to(self.device)
 
         # Ensure all tensors are at least self.replay_size in the first dimension
-        old_states = repeat_tensor_to_size(old_states, self.replay_size)
-        old_actions = repeat_tensor_to_size(old_actions, self.replay_size)
-        old_logprobs = repeat_tensor_to_size(old_logprobs, self.replay_size)
-        old_state_values = repeat_tensor_to_size(old_state_values, self.replay_size)
-        rewards = repeat_tensor_to_size(rewards, self.replay_size)
+        # old_states = repeat_tensor_to_size(old_states, self.replay_size)
+        # old_actions = repeat_tensor_to_size(old_actions, self.replay_size)
+        # old_logprobs = repeat_tensor_to_size(old_logprobs, self.replay_size)
+        # old_state_values = repeat_tensor_to_size(old_state_values, self.replay_size)
+        # rewards = repeat_tensor_to_size(rewards, self.replay_size)
         advantages = rewards.detach() - old_state_values.detach()
 
         # Recalculate advantages if necessary
-        advantages = repeat_tensor_to_size(advantages, self.replay_size)
+        # advantages = repeat_tensor_to_size(advantages, self.replay_size)
 
         # Creating dataset and dataloader for mini-batch processing
         dataset = TensorDataset(old_states, old_actions, old_logprobs, rewards, advantages)
@@ -390,7 +388,7 @@ class PPO (AbstractAgent):
         return replay_buffer.is_full()
 
     def update_with_replay_buffer(self, replay_buffer: DiscretePrioritizedReplayBuffer):
-        dataloader = DataLoader(replay_buffer, batch_size=self.batch_size, shuffle=True, num_workers=8)
+        dataloader = DataLoader(replay_buffer, batch_size=self.batch_size, shuffle=True, num_workers=0)
         # Optimize policy for K epochs
         for epoch in range(self.K_epochs):
             print("Epoch", epoch, "/", self.K_epochs)

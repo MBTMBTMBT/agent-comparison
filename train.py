@@ -85,8 +85,8 @@ def run_training(
         trajectory = []  # List to record each step for the GIF.
         obs, _ = env.reset()  # Reset the environment at the start of each episode.
         rendered = env.render()
-        state = preprocess_image(rendered, rotate=False, size=(192, 192))  # Preprocess the observation for the agent.
-        state_rotated = preprocess_image(rendered, rotate=True, size=(192, 192))
+        state = preprocess_image(rendered, rotate=False, size=(128, 128))  # Preprocess the observation for the agent.
+        state_rotated = preprocess_image(rendered, rotate=True, size=(128, 128))
         # state_img = obs['image']  # Store the original 'image' observation for visualization.
         # episode_states, episode_actions, episode_rewards, episode_log_probs = [], [], [], []
 
@@ -102,8 +102,8 @@ def run_training(
             agent.buffer.is_terminals.append(done)
             trajectory.append((rendered, action))  # Append the step for the GIF.
             rendered = env.render()
-            next_state = preprocess_image(rendered, rotate=False, size=(192, 192))  # Preprocess the new observation.
-            next_state_rotated = preprocess_image(rendered, rotate=True, size=(192, 192))
+            next_state = preprocess_image(rendered, rotate=False, size=(128, 128))  # Preprocess the new observation.
+            next_state_rotated = preprocess_image(rendered, rotate=True, size=(128, 128))
             state = next_state  # Update the current state for the next iteration.
             state_rotated = next_state_rotated
             total_reward += reward
@@ -136,8 +136,8 @@ def run_and_sample(
         trajectory = []  # List to record each step for the GIF.
         obs, _ = env.reset()  # Reset the environment at the start of each episode.
         rendered = env.render()
-        state = preprocess_image(rendered, rotate=False, size=(192, 192))  # Preprocess the observation for the agent.
-        state_rotated = preprocess_image(rendered, rotate=True, size=(192, 192))
+        state = preprocess_image(rendered, rotate=False, size=(128, 128))  # Preprocess the observation for the agent.
+        state_rotated = preprocess_image(rendered, rotate=True, size=(128, 128))
 
         for time in range(env.max_steps):
             time_step += 1
@@ -151,8 +151,8 @@ def run_and_sample(
             agent.buffer.is_terminals.append(done)
             trajectory.append((rendered, action))  # Append the step for the GIF.
             rendered = env.render()
-            next_state = preprocess_image(rendered, rotate=False, size=(192, 192))  # Preprocess the new observation.
-            next_state_rotated = preprocess_image(rendered, rotate=True, size=(192, 192))
+            next_state = preprocess_image(rendered, rotate=False, size=(128, 128))  # Preprocess the new observation.
+            next_state_rotated = preprocess_image(rendered, rotate=True, size=(128, 128))
             state = next_state  # Update the current state for the next iteration.
             state_rotated = next_state_rotated
             total_reward += reward
@@ -188,11 +188,11 @@ if __name__ == "__main__":
 
     ################ PPO hyperparameters ################
     update_timestep = max_ep_len * 4  # update policy every n timesteps
-    K_epochs = 3  # update policy for K epochs
-    batch_size = 32
+    K_epochs = 10  # update policy for K epochs
+    batch_size = 64
     replay_size = max_ep_len
     eps_clip = 0.05  # clip parameter for PPO
-    gamma = 0.99  # discount factor
+    gamma = 0.95  # discount factor
     lr_encoder = 0.005  # learning rate for encoder network
     lr_actor = 0.0003  # learning rate for actor network
     lr_critic = 0.0005  # learning rate for critic network
@@ -222,7 +222,7 @@ if __name__ == "__main__":
         'simple_test_two_rooms0.txt',
         'simple_test_two_rooms1.txt',
         'simple_test_maze_small.txt',
-        # 'simple_test_door_key.txt',
+        'simple_test_door_key.txt',
         # Add more file paths as needed
     ]
 
@@ -239,7 +239,7 @@ if __name__ == "__main__":
         'simple_test_two_rooms0.txt': 5,
         'simple_test_two_rooms1.txt': 5,
         'simple_test_maze_small.txt': 5,
-        # 'simple_test_door_key.txt': 10,
+        'simple_test_door_key.txt': 5,
         # Define episodes for more environments as needed
     }
 
@@ -315,8 +315,9 @@ if __name__ == "__main__":
 
     print("============================================================================================")
     replay_buffer = DiscretePrioritizedReplayBuffer(
-        output_capacity=int(16384/4*3),
+        output_capacity=16384,
         total_capacity=16384,
+        image_size=(128, 128)
     )
 
     for turn in range(100):
@@ -328,11 +329,13 @@ if __name__ == "__main__":
             # Run training for the current environment
             print(f"Sampling on {env_file}")
 
-            save_gif = turn % 10 == 0
+            save_gif = turn % 5 == 4
+            if save_gif:
+                print("Saving trajectories.")
 
             run_and_sample(env, ppo_agent, replay_buffer, episodes=episodes_per_env[env_file], env_name=env_file, save_gif=save_gif)
 
-        for i in range(5):
+        for i in range(2):
             replay_buffer.refresh_output_buffer()
             ppo_agent.update_with_replay_buffer(replay_buffer)
         replay_buffer.shrink_base_buffer()
