@@ -13,7 +13,7 @@ ACTION_NAMES = {
     3: 'Pick Up',
     4: 'Drop',
     5: 'Toggle',
-    6: 'Done'
+    # 6: 'Done'
 }
 
 
