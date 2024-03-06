@@ -189,7 +189,7 @@ if __name__ == "__main__":
     batch_size = 64
     replay_size = max_ep_len
     eps_clip = 0.05  # clip parameter for PPO
-    gamma = 0.95  # discount factor
+    gamma = 0.99  # discount factor
     lr_encoder = 0.005  # learning rate for encoder network
     lr_q_net = 0.005
     input_channels = 3  # RGB input
@@ -209,16 +209,16 @@ if __name__ == "__main__":
     environment_files = [
         'simple_test_corridor_mini.txt',
         'simple_test_corridor.txt',
-        'simple_test_corridor_long.txt',
-        'simple_test_openspace0.txt',
-        'simple_test_openspace1.txt',
-        'simple_test_openspace2.txt',
-        'simple_test_openspace3.txt',
-        'simple_test_openspace4.txt',
-        'simple_test_two_rooms0.txt',
-        'simple_test_two_rooms1.txt',
-        'simple_test_maze_small.txt',
-        'simple_test_door_key.txt',
+        # 'simple_test_corridor_long.txt',
+        # 'simple_test_openspace0.txt',
+        # 'simple_test_openspace1.txt',
+        # 'simple_test_openspace2.txt',
+        # 'simple_test_openspace3.txt',
+        # 'simple_test_openspace4.txt',
+        # 'simple_test_two_rooms0.txt',
+        # 'simple_test_two_rooms1.txt',
+        # 'simple_test_maze_small.txt',
+        # 'simple_test_door_key.txt',
         # Add more file paths as needed
     ]
 
@@ -310,8 +310,9 @@ if __name__ == "__main__":
     print("============================================================================================")
     replay_buffer = DiscretePrioritizedReplayBuffer(
         output_capacity=16384,
-        total_capacity=16384,
-        image_size=(128, 128)
+        total_capacity=0,
+        image_size=(128, 128),
+        random_rotate=False,
     )
 
     for turn in range(counter, 100):
