@@ -68,6 +68,7 @@ class QAgentWIthImageEncoder:
         self.optimizer_q = torch.optim.Adam(self.q_model.parameters(), lr=lr_q)
         self.loss_fn = nn.MSELoss()
         self.loss = 0
+        self.current_epsilon = 1.0
 
     def select_action(self, state: torch.Tensor, training=False) -> int:
         if training:
@@ -77,7 +78,7 @@ class QAgentWIthImageEncoder:
             self.q_model.eval()
             self.encoder.eval()
         self.encoder(torch.FloatTensor(state).to(device=torch.device(self.device)))
-        action = random.randrange(self.action_dim) if np.random.rand() < self.epsilon else \
+        action = random.randrange(self.action_dim) if np.random.rand() < self.current_epsilon else \
             torch.argmax(self.q_model(self.encoder(torch.FloatTensor(state).to(device=torch.device(self.device))))).item()
         # a = self.q_model(torch.FloatTensor(state).to(device=torch.device(self.device)))
         self.q_model.eval()

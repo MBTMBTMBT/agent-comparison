@@ -229,7 +229,7 @@ if __name__ == "__main__":
         'simple_test_openspace1.txt': 5,
         'simple_test_openspace2.txt': 5,
         'simple_test_openspace3.txt': 5,
-        'simple_test_openspace4.txt': 3,
+        'simple_test_openspace4.txt': 5,
         'simple_test_two_rooms0.txt': 5,
         'simple_test_two_rooms1.txt': 5,
         'simple_test_maze_small.txt': 5,
@@ -319,7 +319,7 @@ if __name__ == "__main__":
                 CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len, agent_start_pos=(1,1))))
 
             # Run training for the current environment
-            print(f"Sampling on {env_file}, turn {turn}...")
+            print(f"Sampling on {env_file}, turn {turn}... Epsilon : {agent.current_epsilon}")
 
             save_gif = turn % 5 == 4
             if save_gif:
@@ -333,3 +333,6 @@ if __name__ == "__main__":
         replay_buffer.shrink_base_buffer()
         agent.save(f"{session_name}/model_epoch_{counter}.pth", counter)
         counter += 1
+
+        if agent.current_epsilon >= agent.epsilon:
+            agent.current_epsilon *= 0.975
