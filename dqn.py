@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torchvision.models as models
+import torch.nn.functional as F
 import random
 import numpy as np
 from dqn_replay_buffer import DiscretePrioritizedReplayBuffer
@@ -25,23 +25,31 @@ from tqdm import tqdm
 #         x = self.fc3(x)
 #         return x
 
+class SimpleCNN(nn.Module):
+    def __init__(self, input_channels, num_features=64):
+        super(SimpleCNN, self).__init__()
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
+        self.conv3 = nn.Conv2d(64, num_features, kernel_size=3, stride=2, padding=1)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        return x
 
 class FlexibleImageEncoder(nn.Module):
     def __init__(self, input_channels, output_size):
         super(FlexibleImageEncoder, self).__init__()
-        self.squeezenet = models.squeezenet1_0(pretrained=False)
-        self.squeezenet.features[0] = nn.Conv2d(input_channels, 96, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.feature_extractor = SimpleCNN(input_channels)
         self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512, output_size)
-        self.squeezenet.classifier = nn.Identity()
-        # self.tanh = nn.Tanh()
+        self.fc = nn.Linear(64, output_size)
 
     def forward(self, x):
-        x = self.squeezenet.features(x)
+        x = self.feature_extractor(x)
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
-        # x = self.tanh(x)
         return x
 
 
@@ -68,7 +76,7 @@ class QAgentWIthImageEncoder:
         self.optimizer_q = torch.optim.Adam(self.q_model.parameters(), lr=lr_q)
         self.loss_fn = nn.MSELoss()
         self.loss = 0
-        self.current_epsilon = 1.0
+        self.current_epsilon = 0.5
 
     def select_action(self, state: torch.Tensor, training=False, return_q=False) -> int or tuple[int, torch.Tensor]:
         if training:
