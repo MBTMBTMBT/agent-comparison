@@ -127,7 +127,7 @@ def run_and_sample(
         replay_buffer: DiscretePrioritizedReplayBuffer,
         episodes: int = 1,
         env_name: str = "",
-        save_gif=False,
+        save_gif=0,
 ):
     for e in range(episodes):
         time_step = 0
@@ -141,10 +141,11 @@ def run_and_sample(
         for time in range(env.max_steps):
             time_step += 1
 
-            action = agent.select_action(state, training=True)  # Agent selects an action based on the current state.
+            action, q_vals = agent.select_action(state, training=False, return_q=True)  # Agent selects an action based on the current state.
+            q_vals = q_vals.to(torch.device('cpu'))
             next_obs, reward, terminated, truncated, info = env.step(action)  # Execute the action.
             done = terminated or truncated  # Check if the episode has ended.
-            trajectory.append((rendered, action))  # Append the step for the GIF.
+            trajectory.append((rendered, action, q_vals))  # Append the step for the GIF.
             next_rendered = env.render()
             next_state = preprocess_image(next_rendered, rotate=False, size=(128, 128))  # Preprocess the new observation.
             replay_buffer.add(state, torch.tensor(action), next_state, torch.tensor(reward), done)
@@ -155,10 +156,11 @@ def run_and_sample(
 
             if done:
                 print(f"Episode: {e}/{episodes}, Time: {time + 1}, Reward: {total_reward}")
-                trajectory.append((rendered, action))
+                trajectory.append((rendered, action, q_vals))
                 # Save the recorded trajectory as a GIF after each episode.
-                if save_gif:
-                    save_trajectory_as_gif(trajectory, rewards, ACTION_NAMES, filename=env_name + f"_trajectory_{e}.gif")
+                if e == 0:
+                    print('Saving trajectory...')
+                    save_trajectory_as_gif(trajectory, rewards, ACTION_NAMES, filename=env_name + f"_trajectory_{save_gif}.gif")
                 # agent.charge_replay_buffer(replay_buffer)
                 break
 
@@ -312,20 +314,16 @@ if __name__ == "__main__":
         image_size=(128, 128)
     )
 
-    for turn in range(100):
+    for turn in range(counter, 100):
         for env_file in environment_files:
             # Initialize environment
             env = RGBImgObsWrapper(FullyObsWrapper(
                 CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len, agent_start_pos=(1,1))))
 
             # Run training for the current environment
+            # agent.current_epsilon = 0
             print(f"Sampling on {env_file}, turn {turn}... Epsilon : {agent.current_epsilon}")
-
-            save_gif = turn % 5 == 4
-            if save_gif:
-                print("Saving trajectories.")
-
-            run_and_sample(env, agent, replay_buffer, episodes=episodes_per_env[env_file], env_name=env_file, save_gif=save_gif)
+            run_and_sample(env, agent, replay_buffer, episodes=episodes_per_env[env_file], env_name=env_file, save_gif=counter)
 
         for i in range(2):
             replay_buffer.refresh_output_buffer()
