@@ -75,7 +75,7 @@ class DiscretePrioritizedReplayBuffer(Dataset):
             self,
             output_capacity: int,
             total_capacity: int,
-            random_rotate: bool = True,
+            random_rotate: bool = False,
             image_size: tuple[int, int] = (192, 192)
     ):
         self.image_size = image_size
