@@ -107,7 +107,7 @@ class TextGridWorld(gymnasium.Env):
 
         terminated = self.agent_position == self.goal_position or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 1 if self.agent_position == self.goal_position else -1 if self.grid[self.agent_position] == 'X' else 0
+        reward = 1 if self.agent_position == self.goal_position else -1 if self.grid[self.agent_position] == 'X' else -0.1
 
         self._render_to_surface()
         return self.get_observation(), reward, terminated, truncated, {}
@@ -119,7 +119,7 @@ class TextGridWorld(gymnasium.Env):
         if not self._goal_position:
             self.goal_position = self.assign_position({self.agent_position})
 
-        self._render_to_surface()  # 重新渲染环境状态
+        self._render_to_surface()
         return self.get_observation(), {}
 
     def get_observation(self):
