@@ -3,9 +3,10 @@ import time
 
 import gymnasium
 import pygame
+import torch
 from gymnasium import spaces
 import numpy as np
-
+from torchvision.transforms import transforms
 
 ACTION_NAMES = {
     0: 'UP',
@@ -57,7 +58,7 @@ class TextGridWorld(gymnasium.Env):
     """
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
-    def __init__(self, text_file, cell_size=(20, 20), agent_position=None, goal_position=None):
+    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None):
         super(TextGridWorld, self).__init__()
         self.grid = self.load_grid(text_file)
         self.action_space = spaces.Discrete(4)
@@ -72,6 +73,11 @@ class TextGridWorld(gymnasium.Env):
 
         self.agent_position = None
         self.goal_position = None
+
+        self.obs_size = obs_size  # H, W
+        self.observation_space = spaces.Box(low=0, high=1, shape=(3, obs_size[0], obs_size[1]), dtype=np.uint8)
+
+        self.action_space = spaces.Discrete(len(ACTION_NAMES))
 
         pygame.init()
 
@@ -110,7 +116,9 @@ class TextGridWorld(gymnasium.Env):
         reward = 1 if self.agent_position == self.goal_position else -1 if self.grid[self.agent_position] == 'X' else -0.1
 
         self._render_to_surface()
-        return self.get_observation(), reward, terminated, truncated, {}
+        observation = self.get_observation()
+        observation = torch.tensor(observation).permute(2, 0, 1)
+        return observation, reward, terminated, truncated, {}
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -120,17 +128,19 @@ class TextGridWorld(gymnasium.Env):
             self.goal_position = self.assign_position({self.agent_position})
 
         self._render_to_surface()
-        return self.get_observation(), {}
+        observation = self.get_observation()
+        observation = torch.tensor(observation).permute(2, 0, 1)
+        return observation, {}
 
     def get_observation(self):
         observation = pygame.surfarray.array3d(self.cached_surface)
-        # observation = np.transpose(observation, (1, 0, 2))
+        observation = np.transpose(observation, (1, 0, 2))  # WHC - HWC
         return observation
 
     def _render_to_surface(self):
         if self.viewer is None:
             self.viewer = pygame.Surface(self.screen_size)
-            self.cached_surface = pygame.Surface(self.screen_size)
+            self.cached_surface = pygame.Surface(self.obs_size)  # 使用obs_size代替screen_size
 
         self.viewer.fill((255, 255, 255))
 
@@ -151,7 +161,8 @@ class TextGridWorld(gymnasium.Env):
                         int(self.agent_position[0] * self.cell_size[1] + self.cell_size[1] / 2))
         pygame.draw.circle(self.viewer, (0, 0, 255), agent_center, int(self.cell_size[0] / 2))
 
-        self.cached_surface.blit(self.viewer, (0, 0))
+        scaled_surface = pygame.transform.scale(self.viewer, self.obs_size)
+        self.cached_surface.blit(scaled_surface, (0, 0))
 
     def render(self, mode='rgb_array'):
         if mode == 'human':
@@ -201,8 +212,34 @@ class TextGridWorld(gymnasium.Env):
         return action
 
 
+def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
+    # Convert the numpy array to a PIL Image
+    transform_to_pil = transforms.ToPILImage()
+    pil_image = transform_to_pil(img)
+    # Initialize the transformation list
+    transformations = []
+    # Randomly rotate the image
+    if rotate:
+        rotation_degrees = np.random.choice([0, 90, 180, 270])
+        transformations.append(transforms.RandomRotation([rotation_degrees, rotation_degrees]))
+    # Resize the image if size is specified
+    if size is not None:
+        transformations.append(transforms.Resize(size))
+    # Convert the PIL Image back to a tensor
+    transformations.append(transforms.ToTensor())
+    # Compose all transformations
+    transform_compose = transforms.Compose(transformations)
+    # Apply transformations
+    processed_tensor = transform_compose(pil_image)
+    # Normalize the tensor to [0, 1] (if not already normalized)
+    processed_tensor /= 255.0 if processed_tensor.max() > 1.0 else 1.0
+    # Add a batch dimension
+    processed_tensor = processed_tensor.unsqueeze(0)
+    return processed_tensor
+
+
 if __name__ == "__main__":
-    env = TextGridWorld('gridworld_empty.txt')
+    env = TextGridWorld('gridworld_empty.txt', agent_position=(1, 1), goal_position=(1, 3))
     obs = env.reset()
     done = False
     while not done:
