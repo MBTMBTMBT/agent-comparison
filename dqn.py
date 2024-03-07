@@ -86,7 +86,7 @@ class QAgentWIthImageEncoder:
             self.q_model.eval()
             # self.encoder.eval()
         # encoder_output = self.encoder(torch.FloatTensor(state).to(device=torch.device(self.device)))
-        q_vals = self.q_model(torch.FloatTensor(state).to(device=torch.device(self.device)))
+        q_vals = self.q_model(torch.clone(state).to(device=torch.device(self.device)))
         action = random.randrange(self.action_dim) if np.random.rand() < self.current_epsilon else \
             torch.argmax(q_vals).item()
         # a = self.q_model(torch.FloatTensor(state).to(device=torch.device(self.device)))
