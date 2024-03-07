@@ -7,6 +7,14 @@ from gymnasium import spaces
 import numpy as np
 
 
+ACTION_NAMES = {
+    0: 'UP',
+    1: 'DOWN',
+    2: 'LEFT',
+    3: 'RIGHT',
+}
+
+
 class TextGridWorld(gymnasium.Env):
     """
 
@@ -97,9 +105,9 @@ class TextGridWorld(gymnasium.Env):
             if self.grid[new_position] not in ['W', 'X']:
                 self.agent_position = new_position
 
-        terminated = self.agent_position == self.goal_position or self.grid[self.agent_position] == 'T'
+        terminated = self.agent_position == self.goal_position or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 1 if self.agent_position == self.goal_position else -1 if self.grid[self.agent_position] == 'T' else 0
+        reward = 1 if self.agent_position == self.goal_position else -1 if self.grid[self.agent_position] == 'X' else 0
 
         self._render_to_surface()
         return self.get_observation(), reward, terminated, truncated, {}
@@ -145,7 +153,7 @@ class TextGridWorld(gymnasium.Env):
 
         self.cached_surface.blit(self.viewer, (0, 0))
 
-    def render(self, mode='human'):
+    def render(self, mode='rgb_array'):
         if mode == 'human':
             if self.cached_surface is not None:
                 pygame.init()
