@@ -6,6 +6,7 @@ from minigrid_custom_env import CustomEnvFromFile
 from abstract_agent import AbstractAgent
 from dqn_replay_buffer import DiscretePrioritizedReplayBuffer
 from dqn import QAgentWIthImageEncoder
+import simple_gridworld
 
 from utils import *
 
@@ -138,7 +139,7 @@ def run_and_sample(
         rendered = env.render()
         state = preprocess_image(rendered, rotate=False, size=(128, 128))  # Preprocess the observation for the agent.
 
-        for time in range(env.max_steps):
+        for time in range(max_ep_len):
             time_step += 1
 
             action, q_vals = agent.select_action(state, training=False, return_q=True)  # Agent selects an action based on the current state.
@@ -154,7 +155,7 @@ def run_and_sample(
             total_reward += reward
             rewards.append(reward)
 
-            if done:
+            if done or time >= max_ep_len - 1:
                 print(f"Episode: {e}/{episodes}, Time: {time + 1}, Reward: {total_reward}")
                 trajectory.append((rendered, action, q_vals))
                 # Save the recorded trajectory as a GIF after each episode.
@@ -167,7 +168,7 @@ def run_and_sample(
 
 if __name__ == "__main__":
     import os
-    from minigrid_custom_env import ACTION_NAMES
+    from simple_gridworld import ACTION_NAMES
 
     # Device configuration
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -207,9 +208,9 @@ if __name__ == "__main__":
 
     # List of environments to train on
     environment_files = [
-        'simple_test_corridor_mini.txt',
-        'simple_test_corridor.txt',
-        'simple_test_corridor_long.txt',
+        # 'simple_test_corridor_mini.txt',
+        # 'simple_test_corridor.txt',
+        # 'simple_test_corridor_long.txt',
         # 'simple_test_openspace0.txt',
         # 'simple_test_openspace1.txt',
         # 'simple_test_openspace2.txt',
@@ -220,23 +221,25 @@ if __name__ == "__main__":
         # 'simple_test_maze_small.txt',
         # 'simple_test_door_key.txt',
         # Add more file paths as needed
+        'gridworld_empty.txt',
     ]
 
     # Training settings
     episodes_per_env = {
-        'simple_test_corridor_mini.txt': 5,
-        'simple_test_corridor.txt': 5,
-        'simple_test_corridor_long.txt': 5,
-        'simple_test_openspace0.txt': 5,
-        'simple_test_openspace1.txt': 5,
-        'simple_test_openspace2.txt': 5,
-        'simple_test_openspace3.txt': 5,
-        'simple_test_openspace4.txt': 5,
-        'simple_test_two_rooms0.txt': 5,
-        'simple_test_two_rooms1.txt': 5,
-        'simple_test_maze_small.txt': 5,
-        'simple_test_door_key.txt': 5,
+        # 'simple_test_corridor_mini.txt': 5,
+        # 'simple_test_corridor.txt': 5,
+        # 'simple_test_corridor_long.txt': 5,
+        # 'simple_test_openspace0.txt': 5,
+        # 'simple_test_openspace1.txt': 5,
+        # 'simple_test_openspace2.txt': 5,
+        # 'simple_test_openspace3.txt': 5,
+        # 'simple_test_openspace4.txt': 5,
+        # 'simple_test_two_rooms0.txt': 5,
+        # 'simple_test_two_rooms1.txt': 5,
+        # 'simple_test_maze_small.txt': 5,
+        # 'simple_test_door_key.txt': 5,
         # Define episodes for more environments as needed
+        'gridworld_empty.txt': 10,
     }
 
     ################## init the model ###################
@@ -318,8 +321,9 @@ if __name__ == "__main__":
     for turn in range(counter, 100):
         for env_file in environment_files:
             # Initialize environment
-            env = RGBImgObsWrapper(FullyObsWrapper(
-                CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len, agent_start_pos=(1,1))))
+            # env = RGBImgObsWrapper(FullyObsWrapper(
+            #     CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len, agent_start_pos=(1,1))))
+            env = simple_gridworld.TextGridWorld(text_file=env_file)
 
             # Run training for the current environment
             # agent.current_epsilon = 0
