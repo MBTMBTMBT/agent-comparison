@@ -209,7 +209,7 @@ if __name__ == "__main__":
     environment_files = [
         'simple_test_corridor_mini.txt',
         'simple_test_corridor.txt',
-        # 'simple_test_corridor_long.txt',
+        'simple_test_corridor_long.txt',
         # 'simple_test_openspace0.txt',
         # 'simple_test_openspace1.txt',
         # 'simple_test_openspace2.txt',
