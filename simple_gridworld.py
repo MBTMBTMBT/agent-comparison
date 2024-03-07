@@ -183,21 +183,38 @@ class TextGridWorld(gymnasium.Env):
             pygame.quit()
             self.viewer = None
 
+    def handle_keyboard_input(self):
+        action = None
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    action = 0
+                elif event.key == pygame.K_DOWN:
+                    action = 1
+                elif event.key == pygame.K_LEFT:
+                    action = 2
+                elif event.key == pygame.K_RIGHT:
+                    action = 3
+        return action
+
 
 if __name__ == "__main__":
     env = TextGridWorld('gridworld_empty.txt')
     obs = env.reset()
     done = False
     while not done:
-        action = env.action_space.sample()
-        obs, reward, terminated, truncated, info = env.step(action)
-        # env.render(mode='console')
         env.render(mode='human')
-        if terminated:
-            print("Game Over. Reward:", reward)
-            break
-        elif truncated:
-            print("Episode truncated.")
-            break
-        time.sleep(1)
+        action = env.handle_keyboard_input()
+        if action is not None:
+            obs, reward, terminated, truncated, info = env.step(action)
+            if terminated:
+                print("Game Over. Reward:", reward)
+                done = True
+            elif truncated:
+                print("Episode truncated.")
+                done = True
+        time.sleep(0.1)
     env.close()
