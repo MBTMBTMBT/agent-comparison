@@ -30,34 +30,25 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
     # Convert the numpy array to a PIL Image
     transform_to_pil = transforms.ToPILImage()
     pil_image = transform_to_pil(img)
-
     # Initialize the transformation list
     transformations = []
-
     # Randomly rotate the image
     if rotate:
         rotation_degrees = np.random.choice([0, 90, 180, 270])
         transformations.append(transforms.RandomRotation([rotation_degrees, rotation_degrees]))
-
     # Resize the image if size is specified
     if size is not None:
         transformations.append(transforms.Resize(size))
-
     # Convert the PIL Image back to a tensor
     transformations.append(transforms.ToTensor())
-
     # Compose all transformations
     transform_compose = transforms.Compose(transformations)
-
     # Apply transformations
     processed_tensor = transform_compose(pil_image)
-
     # Normalize the tensor to [0, 1] (if not already normalized)
     processed_tensor /= 255.0 if processed_tensor.max() > 1.0 else 1.0
-
     # Add a batch dimension
     processed_tensor = processed_tensor.unsqueeze(0)
-
     return processed_tensor
 
 
@@ -239,7 +230,7 @@ if __name__ == "__main__":
         # 'simple_test_maze_small.txt': 5,
         # 'simple_test_door_key.txt': 5,
         # Define episodes for more environments as needed
-        'gridworld_empty.txt': 10,
+        'gridworld_empty.txt': 1,
     }
 
     ################## init the model ###################
@@ -312,18 +303,18 @@ if __name__ == "__main__":
 
     print("============================================================================================")
     replay_buffer = DiscretePrioritizedReplayBuffer(
-        output_capacity=16384,
+        output_capacity=5,
         total_capacity=0,
         image_size=(128, 128),
         random_rotate=False,
     )
 
-    for turn in range(counter, 100):
+    for turn in range(counter, 500):
         for env_file in environment_files:
             # Initialize environment
             # env = RGBImgObsWrapper(FullyObsWrapper(
             #     CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len, agent_start_pos=(1,1))))
-            env = simple_gridworld.TextGridWorld(text_file=env_file)
+            env = simple_gridworld.TextGridWorld(text_file=env_file,)  # agent_position=(1, 1), goal_position=(1, 3))
 
             # Run training for the current environment
             # agent.current_epsilon = 0
