@@ -41,6 +41,10 @@ def make_env():
 
 
 if __name__ == "__main__":
+    from utils import *
+    from simple_gridworld import ACTION_NAMES
+    env_name = 'gridworld_empty.txt'
+
     env = DummyVecEnv([make_env, make_env, make_env, make_env,])
 
     policy_kwargs = dict(
@@ -55,22 +59,35 @@ if __name__ == "__main__":
         model.save("ppo_textgridworld")
 
         # model = PPO.load("ppo_textgridworld")
-        env = TextGridWorld('gridworld_empty.txt')
+        env = TextGridWorld(env_name)
 
         obs, _ = env.reset()
-        env.render(mode='human')
+        # env.render(mode='human')
         terminated, truncated = False, False
+        rendered, action, probs = None, None, None
         count = 0
+        trajectory = []
+        rewards = [0.0, ]
         while not (terminated or truncated):
-            action, _states = model.predict(obs, deterministic=True)
+            rendered = env.render(mode='rgb_array')
+            action, _states = model.predict(obs, deterministic=False)
+            dis = model.policy.get_distribution(obs.unsqueeze(0).to(torch.device('cuda')))
+            probs = dis.distribution.probs
+            probs = probs.to(torch.device('cpu')).squeeze()
+            trajectory.append((rendered, action.item(), probs))
             obs, reward, terminated, truncated, info = env.step(action.item())
+            rewards.append(reward)
             count += 1
-            if count >= 5:
+            if count >= 256:
                 break
             # env.render(mode='human')
             # time.sleep(1)
 
         print("Test:", i, "Count:", count)
+        if rendered is not None and action is not None and probs is not None:
+            rendered = env.render(mode='rgb_array')
+            trajectory.append((rendered, action.item(), probs))
+        save_trajectory_as_gif(trajectory, rewards, ACTION_NAMES, filename=env_name + f"_trajectory_{i}.gif")
 
     # # 假设你的模型是model，环境是env
     # obs = env.reset()
