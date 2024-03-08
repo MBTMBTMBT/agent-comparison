@@ -10,9 +10,9 @@ ACTION_NAMES = {
     0: 'Turn Left',
     1: 'Turn Right',
     2: 'Move Forward',
-    3: 'Pick Up',
-    4: 'Drop',
-    5: 'Toggle',
+    # 3: 'Pick Up',
+    # 4: 'Drop',
+    # 5: 'Toggle',
     # 6: 'Done'
 }
 

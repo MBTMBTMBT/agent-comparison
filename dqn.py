@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torchvision.models as models
+import torch.nn.functional as F
 import random
 import numpy as np
 from dqn_replay_buffer import DiscretePrioritizedReplayBuffer
@@ -8,40 +8,48 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 
-class QModel(nn.Module):
-    def __init__(self, action_size, input_size=4):
-        super(QModel, self).__init__()
-        self.action_size = action_size
-        self.input_size = input_size
-        self.fc1 = nn.Linear(self.input_size, 24)
-        self.fc2 = nn.Linear(24, 24)
-        self.fc3 = nn.Linear(24, self.action_size)
-        self.tanh = nn.Tanh()
-        self.relu = nn.ReLU()
+# class QModel(nn.Module):
+#     def __init__(self, action_size, input_size=4):
+#         super(QModel, self).__init__()
+#         self.action_size = action_size
+#         self.input_size = input_size
+#         self.fc1 = nn.Linear(self.input_size, 24)
+#         self.fc2 = nn.Linear(24, 24)
+#         self.fc3 = nn.Linear(24, self.action_size)
+#         self.tanh = nn.Tanh()
+#         self.relu = nn.ReLU()
+#
+#     def forward(self, x):
+#         x = self.relu(self.fc1(x))
+#         x = self.relu(self.fc2(x))
+#         x = self.fc3(x)
+#         return x
+
+class SimpleCNN(nn.Module):
+    def __init__(self, input_channels, num_features=64):
+        super(SimpleCNN, self).__init__()
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
+        self.conv3 = nn.Conv2d(64, num_features, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
-        x = self.relu(self.fc1(x))
-        x = self.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
         return x
-
 
 class FlexibleImageEncoder(nn.Module):
     def __init__(self, input_channels, output_size):
         super(FlexibleImageEncoder, self).__init__()
-        self.squeezenet = models.squeezenet1_0(pretrained=False)
-        self.squeezenet.features[0] = nn.Conv2d(input_channels, 96, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.feature_extractor = SimpleCNN(input_channels)
         self.adapt_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512, output_size)
-        self.squeezenet.classifier = nn.Identity()
-        self.tanh = nn.Tanh()
+        self.fc = nn.Linear(64, output_size)
 
     def forward(self, x):
-        x = self.squeezenet.features(x)
+        x = self.feature_extractor(x)
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
-        x = self.tanh(x)
         return x
 
 
@@ -61,29 +69,29 @@ class QAgentWIthImageEncoder:
         self.epsilon = epsilon
         self.gamma = gamma
         self.device = device
-        self.encoder = FlexibleImageEncoder(input_channels, state_dim).to(device=torch.device(device))
-        self.q_model = QModel(action_dim, state_dim).to(device=torch.device(device))
-        self.target_model = QModel(action_dim, state_dim).to(device=torch.device(device))
-        self.optimizer_encoder = torch.optim.Adam(self.encoder.parameters(), lr=lr_encoder)
+        self.q_model = FlexibleImageEncoder(input_channels, action_dim).to(device=torch.device(device))
+        # self.q_model = QModel(action_dim, state_dim).to(device=torch.device(device))
+        self.target_model = FlexibleImageEncoder(input_channels, action_dim).to(device=torch.device(device))
+        # self.optimizer_encoder = torch.optim.Adam(self.encoder.parameters(), lr=lr_encoder)
         self.optimizer_q = torch.optim.Adam(self.q_model.parameters(), lr=lr_q)
         self.loss_fn = nn.MSELoss()
         self.loss = 0
-        self.current_epsilon = 1.0
+        self.current_epsilon = 0.5
 
     def select_action(self, state: torch.Tensor, training=False, return_q=False) -> int or tuple[int, torch.Tensor]:
         if training:
             self.q_model.train()
-            self.encoder.train()
+            # self.encoder.train()
         else:
             self.q_model.eval()
-            self.encoder.eval()
-        self.encoder(torch.FloatTensor(state).to(device=torch.device(self.device)))
-        q_vals = self.q_model(self.encoder(torch.FloatTensor(state).to(device=torch.device(self.device))))
+            # self.encoder.eval()
+        # encoder_output = self.encoder(torch.FloatTensor(state).to(device=torch.device(self.device)))
+        q_vals = self.q_model(torch.clone(state).to(device=torch.device(self.device)))
         action = random.randrange(self.action_dim) if np.random.rand() < self.current_epsilon else \
             torch.argmax(q_vals).item()
         # a = self.q_model(torch.FloatTensor(state).to(device=torch.device(self.device)))
         self.q_model.eval()
-        self.encoder.eval()
+        # self.encoder.eval()
         if return_q:
             return action, q_vals
         return action
@@ -96,7 +104,7 @@ class QAgentWIthImageEncoder:
             num_workers: int = 4,
     ):
         self.q_model.train()
-        self.encoder.train()
+        # self.encoder.train()
         self.target_model.eval()
         dataloader = DataLoader(replay_buffer, batch_size=batch_size, shuffle=True, num_workers=num_workers)
         for epoch in range(num_epochs):
@@ -128,7 +136,7 @@ class QAgentWIthImageEncoder:
                 terminal_batch = terminal_batch.to(device)
 
                 # Step 2: Compute Q-values for all next states
-                next_state_q_values = self.target_model(self.encoder(next_state_batch)).max(dim=1)[0]
+                next_state_q_values = self.target_model(next_state_batch).max(dim=1)[0]
 
                 # Step 3: Initialize y_batch with reward_batch
                 y_batch = reward_batch.clone()
@@ -138,27 +146,27 @@ class QAgentWIthImageEncoder:
                 y_batch[non_terminal_mask] += self.gamma * next_state_q_values[non_terminal_mask]
 
                 # Processing current states
-                current_state_q = self.q_model(self.encoder(old_states_batch.to(device))).max(dim=1)[0]
+                current_state_q = self.q_model(old_states_batch.to(device)).max(dim=1)[0]
 
                 # Compute and backpropagate loss
                 loss = self.loss_fn(current_state_q, y_batch).mean()
                 self.optimizer_q.zero_grad()
-                self.optimizer_encoder.zero_grad()
+                # self.optimizer_encoder.zero_grad()
                 loss.backward()
                 self.optimizer_q.step()
-                self.optimizer_encoder.step()
+                # self.optimizer_encoder.step()
 
         self.target_model.load_state_dict(self.q_model.state_dict())
         self.q_model.eval()
-        self.encoder.eval()
+        # self.encoder.eval()
 
     def save(self, checkpoint_path, counter=-1, performance=0.0):
         torch.save(
             {
                 'counter': counter,
-                'encoder': self.encoder.state_dict(),
+                # 'encoder': self.encoder.state_dict(),
                 'model': self.q_model.state_dict(),
-                'optimizer_encoder': self.optimizer_encoder.state_dict(),
+                # 'optimizer_encoder': self.optimizer_encoder.state_dict(),
                 'optimizer': self.optimizer_q.state_dict(),
                 'performance': performance,
             },
@@ -167,8 +175,8 @@ class QAgentWIthImageEncoder:
 
     def load(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        self.encoder.load_state_dict(checkpoint['encoder'])
+        # self.encoder.load_state_dict(checkpoint['encoder'])
         self.q_model.load_state_dict(checkpoint['model'])
-        self.optimizer_encoder.load_state_dict(checkpoint['optimizer_encoder'])
+        # self.optimizer_encoder.load_state_dict(checkpoint['optimizer_encoder'])
         self.optimizer_q.load_state_dict(checkpoint['optimizer'])
         return checkpoint['counter'], checkpoint['performance']
