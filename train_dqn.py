@@ -212,7 +212,7 @@ if __name__ == "__main__":
         # 'simple_test_maze_small.txt',
         # 'simple_test_door_key.txt',
         # Add more file paths as needed
-        'gridworld_empty.txt',
+        'gridworld-empty-5.txt',
     ]
 
     # Training settings
@@ -230,7 +230,7 @@ if __name__ == "__main__":
         # 'simple_test_maze_small.txt': 5,
         # 'simple_test_door_key.txt': 5,
         # Define episodes for more environments as needed
-        'gridworld_empty.txt': 1,
+        'gridworld-empty-5.txt': 1,
     }
 
     ################## init the model ###################
