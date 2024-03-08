@@ -117,7 +117,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
-            "max_steps": 128,
+            "max_steps": 256,
         },
         {
             "env_type": "SimpleGridworld",
@@ -147,7 +147,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
-            "max_steps": 128,
+            "max_steps": 256,
         },
         {
             "env_type": "SimpleGridworld",
@@ -157,7 +157,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
-            "max_steps": 128,
+            "max_steps": 256,
         },
     ]
     env_fns = [partial(make_env, config) for config in env_configurations]
