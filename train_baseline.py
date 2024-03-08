@@ -2,10 +2,9 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import DummyVecEnv
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 import torch.nn as nn
-import gymnasium
 import torch
 from simple_gridworld import TextGridWorld
-import torch.nn.functional as F
+import gymnasium
 
 
 class FlexibleImageEncoder(BaseFeaturesExtractor):
@@ -33,17 +32,87 @@ class FlexibleImageEncoder(BaseFeaturesExtractor):
         return x
 
 
-def make_env():
-    env = TextGridWorld(text_file="gridworld_empty.txt", cell_size=(20, 20))
+def make_env(configure: dict) -> gymnasium.Env:
+    env = None
+    if configure["env_type"] == "SimpleGridworld":
+        if "cell_size" in configure.keys():
+            cell_size = configure["cell_size"]
+        else:
+            cell_size = (20, 20)
+        if "obs_size" in configure.keys():
+            obs_size = configure["obs_size"]
+        else:
+            obs_size = (128, 128)
+        if "agent_position" in configure.keys():
+            agent_position = configure["agent_position"]
+        else:
+            agent_position = None
+        if "goal_position" in configure.keys():
+            goal_position = configure["goal_position"]
+        else:
+            goal_position = None
+        env = TextGridWorld(text_file=configure["env_file"], cell_size=cell_size, obs_size=obs_size, agent_position=agent_position, goal_position=goal_position)
     return env
 
 
 if __name__ == "__main__":
     from utils import *
     from simple_gridworld import ACTION_NAMES
-    env_name = 'gridworld_empty.txt'
+    from functools import partial
 
-    env = DummyVecEnv([make_env, make_env, make_env, make_env,])
+    env_configurations = [
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-empty-5.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-empty-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-5.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-two-rooms-5.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-four-rooms-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None
+        },
+    ]
+    env_fns = [partial(make_env, config) for config in env_configurations]
+
+    env = DummyVecEnv(env_fns)
 
     policy_kwargs = dict(
         features_extractor_class=FlexibleImageEncoder,
