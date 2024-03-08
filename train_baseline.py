@@ -1,5 +1,3 @@
-import time
-
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import DummyVecEnv
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
@@ -88,24 +86,3 @@ if __name__ == "__main__":
             rendered = env.render(mode='rgb_array')
             trajectory.append((rendered, action.item(), probs))
         save_trajectory_as_gif(trajectory, rewards, ACTION_NAMES, filename=env_name + f"_trajectory_{i}.gif")
-
-    # # 假设你的模型是model，环境是env
-    # obs = env.reset()
-    #
-    # # 使用模型的策略网络直接处理观测
-    # action, _states = model.predict(obs, deterministic=False)  # 获取动作
-    #
-    # # 要获取动作概率分布，你可以直接使用策略网络
-    # action_probs = model.policy.forward(obs[None, :])  # 添加额外的批处理维度
-    #
-    # # action_probs是一个元组，包含(logits, values)等，具体取决于策略的类型
-    # # 对于离散动作空间，你通常关注logits（即未归一化的概率对数）
-    #
-    # # 如果你想要概率分布，可以这样做：
-    # distribution = model.policy.action_dist.proba_distribution(action_probs[0])
-    # probs = distribution.probs  # 对于离散动作空间，获取概率分布
-    #
-    # # 对于连续动作空间，distribution对象将提供不同的属性和方法来访问分布的参数
-    #
-    # # 注意：这个示例假设你的环境只有一个观测和动作。
-    # # 对于向量化环境，处理方法会略有不同，你可能需要对每个环境分别处理。

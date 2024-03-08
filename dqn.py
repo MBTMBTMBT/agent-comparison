@@ -60,7 +60,6 @@ class QAgentWIthImageEncoder:
             state_dim: int,
             action_dim: int,
             lr_q: float = 0.001,
-            lr_encoder: float = 0.001,
             gamma: float = 0.99,
             epsilon: float = 0.2,
             device='cpu',

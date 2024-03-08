@@ -1,5 +1,4 @@
 import gymnasium
-import torch
 import torchvision.transforms as transforms
 from minigrid.wrappers import FullyObsWrapper, RGBImgObsWrapper
 from minigrid_custom_env import CustomEnvFromFile
