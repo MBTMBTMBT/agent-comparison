@@ -101,7 +101,7 @@ if __name__ == "__main__":
     env_configurations = [
         {
             "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-empty-5.txt",
+            "env_file": "envs/simple_grid/gridworld-empty-7.txt",
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         },
         {
             "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-maze-5.txt",
+            "env_file": "envs/simple_grid/gridworld-maze-7.txt",
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
@@ -131,7 +131,7 @@ if __name__ == "__main__":
         },
         {
             "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-two-rooms-5.txt",
+            "env_file": "envs/simple_grid/gridworld-two-rooms-7.txt",
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
@@ -147,7 +147,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
-            "max_steps": 256,
+            "max_steps": 512,
         },
         {
             "env_type": "SimpleGridworld",
@@ -157,7 +157,37 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
-            "max_steps": 256,
+            "max_steps": 512,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-corridors-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "make_random": True,
+            "max_steps": 512,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-many-rooms-9.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "make_random": True,
+            "max_steps": 512,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-many-rooms-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "make_random": True,
+            "max_steps": 512,
         },
     ]
     env_fns = [partial(make_env, config) for config in env_configurations]

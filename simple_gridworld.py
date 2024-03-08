@@ -270,7 +270,7 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = TextGridWorld('envs/simple_grid/gridworld-empty-5.txt', agent_position=(1, 1), goal_position=(1, 3))
+    env = TextGridWorld('envs/simple_grid/gridworld-empty-7.txt', agent_position=(1, 1), goal_position=(1, 3))
     obs = env.reset()
     done = False
     while not done:
