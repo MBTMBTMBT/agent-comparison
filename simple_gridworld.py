@@ -117,7 +117,8 @@ class TextGridWorld(gymnasium.Env):
 
         self._render_to_surface()
         observation = self.get_observation()
-        observation = torch.tensor(observation).permute(2, 0, 1)
+        observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
+        observation /= 255.0 if observation.max() > 1.0 else 1.0
         return observation, reward, terminated, truncated, {}
 
     def reset(self, seed=None, options=None):
@@ -129,7 +130,8 @@ class TextGridWorld(gymnasium.Env):
 
         self._render_to_surface()
         observation = self.get_observation()
-        observation = torch.tensor(observation).permute(2, 0, 1)
+        observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
+        observation /= 255.0 if observation.max() > 1.0 else 1.0
         return observation, {}
 
     def get_observation(self):
