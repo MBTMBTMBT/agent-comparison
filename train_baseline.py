@@ -60,6 +60,10 @@ def make_env(configure: dict) -> gymnasium.Env:
             make_random = configure["make_random"]
         else:
             make_random = False
+        if "max_steps" in configure.keys():
+            max_steps = configure["max_steps"]
+        else:
+            max_steps = 128
         env = TextGridWorld(
             text_file=configure["env_file"],
             cell_size=cell_size,
@@ -67,6 +71,7 @@ def make_env(configure: dict) -> gymnasium.Env:
             agent_position=agent_position,
             goal_position=goal_position,
             make_random=make_random,
+            max_steps=max_steps
         )
     return env
 
@@ -102,6 +107,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
+            "max_steps": 128,
         },
         {
             "env_type": "SimpleGridworld",
@@ -111,6 +117,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
+            "max_steps": 128,
         },
         {
             "env_type": "SimpleGridworld",
@@ -120,6 +127,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
+            "max_steps": 128,
         },
         {
             "env_type": "SimpleGridworld",
@@ -129,6 +137,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
+            "max_steps": 128,
         },
         {
             "env_type": "SimpleGridworld",
@@ -138,6 +147,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
+            "max_steps": 128,
         },
         {
             "env_type": "SimpleGridworld",
@@ -147,6 +157,7 @@ if __name__ == "__main__":
             "agent_position": None,
             "goal_position": None,
             "make_random": True,
+            "max_steps": 128,
         },
     ]
     env_fns = [partial(make_env, config) for config in env_configurations]

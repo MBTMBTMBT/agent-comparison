@@ -58,9 +58,11 @@ class TextGridWorld(gymnasium.Env):
     """
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
-    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, make_random=False,):
+    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, make_random=False, max_steps=128):
         super(TextGridWorld, self).__init__()
         self.random = make_random
+        self.max_steps = max_steps
+        self.step_count = 0
 
         self.grid = self.load_grid(text_file)
         self.action_space = spaces.Discrete(4)
@@ -119,6 +121,7 @@ class TextGridWorld(gymnasium.Env):
                 return position
 
     def step(self, action):
+        self.step_count += 1
         deltas = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
         delta = deltas[action]
         new_position = (self.agent_position[0] + delta[0], self.agent_position[1] + delta[1])
@@ -135,10 +138,15 @@ class TextGridWorld(gymnasium.Env):
         observation = self.get_observation()
         observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
         observation /= 255.0 if observation.max() > 1.0 else 1.0
+        if self.step_count >= self.max_steps:
+            terminated = True
+            truncated = True
+            reward = 0
         return observation, reward, terminated, truncated, {}
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        self.step_count = 0
         if self.random:
             # Randomly rotate the grid
             self.grid = self.rotate_grid(self.grid)
