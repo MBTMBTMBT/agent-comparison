@@ -8,23 +8,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 
-# class QModel(nn.Module):
-#     def __init__(self, action_size, input_size=4):
-#         super(QModel, self).__init__()
-#         self.action_size = action_size
-#         self.input_size = input_size
-#         self.fc1 = nn.Linear(self.input_size, 24)
-#         self.fc2 = nn.Linear(24, 24)
-#         self.fc3 = nn.Linear(24, self.action_size)
-#         self.tanh = nn.Tanh()
-#         self.relu = nn.ReLU()
-#
-#     def forward(self, x):
-#         x = self.relu(self.fc1(x))
-#         x = self.relu(self.fc2(x))
-#         x = self.fc3(x)
-#         return x
-
 class SimpleCNN(nn.Module):
     def __init__(self, input_channels, num_features=64):
         super(SimpleCNN, self).__init__()
@@ -109,25 +92,6 @@ class QAgentWIthImageEncoder:
         for epoch in range(num_epochs):
             for old_states_batch, old_actions_batch, next_state_batch, reward_batch, terminal_batch in tqdm(
                     dataloader, desc='Epoch %d/%d' % (epoch+1, num_epochs)):
-                # y_batch = torch.FloatTensor().to(torch.device(self.device))
-                # for i in range(len(terminal_batch)):
-                #     if terminal_batch[i]:
-                #         y_batch = torch.cat((y_batch, torch.FloatTensor([reward_batch[i]]).to(torch.device(self.device))), 0)
-                #     else:
-                #         # xxx = next_state_batch[i]
-                #         next_state_q = torch.max(self.target_model(self.encoder(torch.unsqueeze(next_state_batch[i], dim=0).to(torch.device(self.device)))))
-                #         y = torch.FloatTensor([reward_batch[i] + self.gamma * next_state_q]).to(torch.device(self.device))
-                #         y_batch = torch.cat((y_batch, y), 0).to(torch.device(self.device))
-                #
-                # current_state_q = torch.max(self.q_model(self.encoder(old_states_batch.to(torch.device(self.device)))), dim=1)[0]
-                #
-                # self.loss = self.loss_fn(current_state_q, y_batch).mean()
-                # self.optimizer_q.zero_grad()
-                # self.optimizer_encoder.zero_grad()
-                # self.loss.backward()
-                # self.optimizer_q.step()
-                # self.optimizer_encoder.step()
-
                 # Step 1: Prepare the data
                 device = torch.device(self.device)  # Assuming self.device is a string like 'cuda' or 'cpu'
                 next_state_batch = next_state_batch.to(device)
