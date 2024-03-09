@@ -126,13 +126,18 @@ class TextGridWorld(gymnasium.Env):
         delta = deltas[action]
         new_position = (self.agent_position[0] + delta[0], self.agent_position[1] + delta[1])
 
+        hits_wall = False
         if 0 <= new_position[0] < self.grid.shape[0] and 0 <= new_position[1] < self.grid.shape[1]:
-            if self.grid[new_position] not in ['W', 'X']:
+            if self.grid[new_position] not in ['W']:
                 self.agent_position = new_position
+            elif self.grid[new_position] == 'W':
+                hits_wall = True
 
         terminated = self.agent_position == self.goal_position or self.grid[self.agent_position] == 'X'
         truncated = False
         reward = 1 if self.agent_position == self.goal_position else -1 if self.grid[self.agent_position] == 'X' else -0.1
+        if hits_wall:
+            reward -= 0.2
 
         self._render_to_surface()
         observation = self.get_observation()
