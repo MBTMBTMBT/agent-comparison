@@ -58,8 +58,12 @@ class TextGridWorld(gymnasium.Env):
     """
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
-    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None):
+    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, make_random=False, max_steps=128):
         super(TextGridWorld, self).__init__()
+        self.random = make_random
+        self.max_steps = max_steps
+        self.step_count = 0
+
         self.grid = self.load_grid(text_file)
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0, high=max(self.grid.shape), shape=(2,), dtype=np.int32)
@@ -86,7 +90,21 @@ class TextGridWorld(gymnasium.Env):
     def load_grid(self, text_file):
         with open(text_file, 'r') as file:
             lines = file.read().splitlines()
-        grid = np.array([list(line) for line in lines])
+        self.grid = np.array([list(line) for line in lines])
+        return self.grid
+
+    def rotate_grid(self, grid):
+        """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
+        rotations = random.choice([0, 1, 2, 3])
+        return np.rot90(grid, k=rotations)
+
+    def flip_grid(self, grid):
+        """Flip the grid randomly: horizontally, vertically, or not at all."""
+        flip_type = random.choice(["horizontal", "vertical", "none"])
+        if flip_type == "horizontal":
+            return np.fliplr(grid)
+        elif flip_type == "vertical":
+            return np.flipud(grid)
         return grid
 
     def reset_positions(self):
@@ -103,6 +121,7 @@ class TextGridWorld(gymnasium.Env):
                 return position
 
     def step(self, action):
+        self.step_count += 1
         deltas = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
         delta = deltas[action]
         new_position = (self.agent_position[0] + delta[0], self.agent_position[1] + delta[1])
@@ -119,10 +138,20 @@ class TextGridWorld(gymnasium.Env):
         observation = self.get_observation()
         observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
         observation /= 255.0 if observation.max() > 1.0 else 1.0
+        if self.step_count >= self.max_steps:
+            terminated = True
+            truncated = True
+            reward = 0
         return observation, reward, terminated, truncated, {}
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        self.step_count = 0
+        if self.random:
+            # Randomly rotate the grid
+            self.grid = self.rotate_grid(self.grid)
+            # Randomly flip the grid
+            self.grid = self.flip_grid(self.grid)
         if not self._agent_position:
             self.agent_position = self.assign_position({self.goal_position})
         if not self._goal_position:
@@ -241,7 +270,7 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = TextGridWorld('gridworld_empty.txt', agent_position=(1, 1), goal_position=(1, 3))
+    env = TextGridWorld('envs/simple_grid/gridworld-empty-7.txt', agent_position=(1, 1), goal_position=(1, 3))
     obs = env.reset()
     done = False
     while not done:
