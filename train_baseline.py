@@ -56,6 +56,10 @@ def make_env(configure: dict) -> gymnasium.Env:
             goal_position = configure["goal_position"]
         else:
             goal_position = None
+        if "num_random_traps" in configure.keys():
+            num_random_traps = configure["num_random_traps"]
+        else:
+            num_random_traps = 0
         if "make_random" in configure.keys():
             make_random = configure["make_random"]
         else:
@@ -70,6 +74,7 @@ def make_env(configure: dict) -> gymnasium.Env:
             obs_size=obs_size,
             agent_position=agent_position,
             goal_position=goal_position,
+            random_traps=num_random_traps,
             make_random=make_random,
             max_steps=max_steps
         )
@@ -106,6 +111,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 3,
             "make_random": True,
             "max_steps": 128,
         },
@@ -116,6 +122,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 5,
             "make_random": True,
             "max_steps": 256,
         },
@@ -126,6 +133,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 3,
             "make_random": True,
             "max_steps": 128,
         },
@@ -136,6 +144,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 3,
             "make_random": True,
             "max_steps": 128,
         },
@@ -146,6 +155,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 5,
             "make_random": True,
             "max_steps": 512,
         },
@@ -156,6 +166,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 5,
             "make_random": True,
             "max_steps": 512,
         },
@@ -166,6 +177,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 5,
             "make_random": True,
             "max_steps": 512,
         },
@@ -176,6 +188,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 3,
             "make_random": True,
             "max_steps": 512,
         },
@@ -186,6 +199,7 @@ if __name__ == "__main__":
             "obs_size": None,
             "agent_position": None,
             "goal_position": None,
+            "num_random_traps": 5,
             "make_random": True,
             "max_steps": 512,
         },
