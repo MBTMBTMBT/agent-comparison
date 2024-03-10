@@ -212,7 +212,7 @@ if __name__ == "__main__":
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
-            "goal_position": None,
+            "goal_position": (3, 3),
             "num_random_traps": 0,
             "make_random": True,
             "max_steps": 128,
