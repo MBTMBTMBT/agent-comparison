@@ -152,7 +152,7 @@ class TextGridWorld(gymnasium.Env):
 
         terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 1 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_ramdom_traps) else -0.01
+        reward = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_ramdom_traps) else -0.01
         if hits_wall:
             reward -= 0.1
 
