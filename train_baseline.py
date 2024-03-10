@@ -264,7 +264,7 @@ if __name__ == "__main__":
         model = PPO.load(newest_model_path, env=env, verbose=1)
     else:
         print("Creating a new model")
-        model = PPO("CnnPolicy", env, verbose=1)  # policy_kwargs=policy_kwargs,
+        model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)  # policy_kwargs=policy_kwargs,
 
     for i in range(100):
         model.learn(total_timesteps=500000, progress_bar=True)
