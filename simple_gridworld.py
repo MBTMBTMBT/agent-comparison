@@ -58,7 +58,7 @@ class TextGridWorld(gymnasium.Env):
     """
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
-    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, make_random=False, max_steps=128):
+    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, random_traps=0, make_random=False, max_steps=128):
         super(TextGridWorld, self).__init__()
         self.random = make_random
         self.max_steps = max_steps
@@ -75,6 +75,9 @@ class TextGridWorld(gymnasium.Env):
         self._agent_position = agent_position
         self._goal_position = goal_position
 
+        self.num_random_traps = random_traps
+        self.pos_ramdom_traps = []
+
         self.agent_position = None
         self.goal_position = None
 
@@ -85,6 +88,7 @@ class TextGridWorld(gymnasium.Env):
 
         pygame.init()
 
+        self.occupied_positions = set()
         self.reset_positions()
 
     def load_grid(self, text_file):
@@ -108,17 +112,32 @@ class TextGridWorld(gymnasium.Env):
         return grid
 
     def reset_positions(self):
-        occupied_positions = set()
-        self.agent_position = self._agent_position if self._agent_position else self.assign_position(occupied_positions)
-        occupied_positions.add(self.agent_position)
+        self.occupied_positions = set()
 
-        self.goal_position = self._goal_position if self._goal_position else self.assign_position(occupied_positions)
+        self.agent_position = self._agent_position if self._agent_position else self.assign_position()
+        self.occupied_positions.add(self.agent_position)
 
-    def assign_position(self, occupied_positions):
+        self.goal_position = self._goal_position if self._goal_position else self.assign_position()
+        self.occupied_positions.add(self.goal_position)
+
+        self.pos_ramdom_traps = []
+        for i in range(random.randint(0, self.num_random_traps)):
+            try:
+                trap = self.assign_position()
+                self.pos_ramdom_traps.append(trap)
+                self.occupied_positions.add(trap)
+            except RuntimeError:
+                print("Warning: Not enough empty position assignable for random traps.")
+
+    def assign_position(self):
+        counter = 0
         while True:
             position = (random.randint(0, self.grid.shape[0] - 1), random.randint(0, self.grid.shape[1] - 1))
-            if position not in occupied_positions and self.grid[position] not in ['W', 'X', 'G']:
+            if position not in self.occupied_positions and self.grid[position] not in ['W', 'X', 'G']:
                 return position
+            counter += 1
+            if counter >= 16384:
+                raise RuntimeError("Cannot assign any more positions.")
 
     def step(self, action):
         self.step_count += 1
@@ -133,9 +152,9 @@ class TextGridWorld(gymnasium.Env):
             elif self.grid[new_position] == 'W':
                 hits_wall = True
 
-        terminated = self.agent_position == self.goal_position or self.grid[self.agent_position] == 'X'
+        terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 1 if self.agent_position == self.goal_position else -1 if self.grid[self.agent_position] == 'X' else -0.1
+        reward = 1 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_ramdom_traps) else -0.1
         if hits_wall:
             reward -= 0.2
 
@@ -157,10 +176,11 @@ class TextGridWorld(gymnasium.Env):
             self.grid = self.rotate_grid(self.grid)
             # Randomly flip the grid
             self.grid = self.flip_grid(self.grid)
-        if not self._agent_position:
-            self.agent_position = self.assign_position({self.goal_position})
-        if not self._goal_position:
-            self.goal_position = self.assign_position({self.agent_position})
+        # if not self._agent_position:
+        #     self.agent_position = self.assign_position({self.goal_position})
+        # if not self._goal_position:
+        #     self.goal_position = self.assign_position({self.agent_position})
+        self.reset_positions()
 
         self._render_to_surface()
         observation = self.get_observation()
@@ -186,7 +206,7 @@ class TextGridWorld(gymnasium.Env):
                 rect = pygame.Rect(x * self.cell_size[0], y * self.cell_size[1], self.cell_size[0], self.cell_size[1])
                 if cell_content == 'W':
                     pygame.draw.rect(self.viewer, (0, 0, 0), rect)
-                elif cell_content == 'X':
+                elif cell_content == 'X' or (y, x) in self.pos_ramdom_traps:
                     pygame.draw.rect(self.viewer, (255, 0, 0), rect)
 
         goal_rect = pygame.Rect(self.goal_position[1] * self.cell_size[0], self.goal_position[0] * self.cell_size[1],
@@ -275,16 +295,18 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = TextGridWorld('envs/simple_grid/gridworld-empty-7.txt', agent_position=(1, 1), goal_position=(1, 3))
+    env = TextGridWorld('envs/simple_grid/gridworld-empty-7.txt', agent_position=(1, 1), goal_position=(1, 3), random_traps=5)
     obs = env.reset()
     done = False
+    reward_sum = 0
     while not done:
         env.render(mode='human')
         action = env.handle_keyboard_input()
         if action is not None:
             obs, reward, terminated, truncated, info = env.step(action)
+            reward_sum += reward
             if terminated:
-                print("Game Over. Reward:", reward)
+                print("Game Over. Reward:", reward_sum)
                 done = True
             elif truncated:
                 print("Episode truncated.")
