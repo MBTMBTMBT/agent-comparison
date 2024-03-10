@@ -65,8 +65,6 @@ class TextGridWorld(gymnasium.Env):
         self.step_count = 0
 
         self.grid = self.load_grid(text_file)
-        self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=0, high=max(self.grid.shape), shape=(2,), dtype=np.int32)
         self.cell_size = cell_size
         self.screen_size = (self.grid.shape[1] * cell_size[0], self.grid.shape[0] * cell_size[1])
         self.viewer = None
@@ -81,9 +79,9 @@ class TextGridWorld(gymnasium.Env):
         self.agent_position = None
         self.goal_position = None
 
+        # gymnasium required
         self.obs_size = obs_size  # H, W
         self.observation_space = spaces.Box(low=0, high=1, shape=(3, obs_size[0], obs_size[1]), dtype=np.uint8)
-
         self.action_space = spaces.Discrete(len(ACTION_NAMES))
 
         pygame.init()
