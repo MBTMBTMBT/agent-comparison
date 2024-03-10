@@ -103,7 +103,7 @@ if __name__ == "__main__":
     from simple_gridworld import ACTION_NAMES
     from functools import partial
 
-    env_configurations = [
+    train_env_configurations = [
         {
             "env_type": "SimpleGridworld",
             "env_file": "envs/simple_grid/gridworld-empty-7.txt",
@@ -204,7 +204,44 @@ if __name__ == "__main__":
             "max_steps": 512,
         },
     ]
-    env_fns = [partial(make_env, config) for config in env_configurations]
+
+    test_env_configurations = [
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-empty-traps-7.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 128,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-traps-7.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 256,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-corridors-traps-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 128,
+        },
+    ]
+
+    env_fns = [partial(make_env, config) for config in train_env_configurations]
 
     env = DummyVecEnv(env_fns)
 
@@ -230,10 +267,10 @@ if __name__ == "__main__":
         model = PPO("CnnPolicy", env, policy_kwargs=policy_kwargs, verbose=1)
 
     for i in range(100):
-        model.learn(total_timesteps=200000, progress_bar=True)
+        model.learn(total_timesteps=500000, progress_bar=True)
         save_model(model, i, base_name, save_dir)
 
-        for config in env_configurations:
+        for config in train_env_configurations + test_env_configurations:
             test_env = make_env(config)
             obs, _ = test_env.reset()
             terminated, truncated = False, False
