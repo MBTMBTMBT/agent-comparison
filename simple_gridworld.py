@@ -154,9 +154,9 @@ class TextGridWorld(gymnasium.Env):
 
         terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 1 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_ramdom_traps) else -0.1
+        reward = 1 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_ramdom_traps) else -0.01
         if hits_wall:
-            reward -= 0.2
+            reward -= 0.1
 
         self._render_to_surface()
         observation = self.get_observation()
@@ -295,7 +295,7 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = TextGridWorld('envs/simple_grid/gridworld-empty-7.txt', agent_position=(1, 1), goal_position=(1, 3), random_traps=5)
+    env = TextGridWorld('envs/simple_grid/gridworld-empty-traps-7.txt', agent_position=(1, 1), goal_position=(3, 3), random_traps=0)
     obs = env.reset()
     done = False
     reward_sum = 0
