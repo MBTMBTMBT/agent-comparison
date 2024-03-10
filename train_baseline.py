@@ -1,36 +1,36 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import DummyVecEnv
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-import torch.nn as nn
-import torch
+# from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+# import torch.nn as nn
+# import torch
 from simple_gridworld import TextGridWorld
 import gymnasium
-import os
+# import os
 
 
-class FlexibleImageEncoder(BaseFeaturesExtractor):
-    def __init__(self, observation_space, features_dim: int = 64):
-        super(FlexibleImageEncoder, self).__init__(observation_space, features_dim=features_dim)
-
-        input_channels = observation_space.shape[0]  # HxWxC
-        self.cnn = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, features_dim, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-        )
-        # Adaptive pooling allows for flexible input sizes
-        self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(features_dim, features_dim)
-
-    def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        x = self.cnn(observations)
-        x = self.adaptive_pool(x)
-        x = torch.flatten(x, start_dim=1)
-        x = self.fc(x)
-        return x
+# class FlexibleImageEncoder(BaseFeaturesExtractor):
+#     def __init__(self, observation_space, features_dim: int = 64):
+#         super(FlexibleImageEncoder, self).__init__(observation_space, features_dim=features_dim)
+#
+#         input_channels = observation_space.shape[0]  # HxWxC
+#         self.cnn = nn.Sequential(
+#             nn.Conv2d(input_channels, 32, kernel_size=3, stride=2, padding=1),
+#             nn.ReLU(),
+#             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+#             nn.ReLU(),
+#             nn.Conv2d(64, features_dim, kernel_size=3, stride=2, padding=1),
+#             nn.ReLU(),
+#         )
+#         # Adaptive pooling allows for flexible input sizes
+#         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
+#         self.fc = nn.Linear(features_dim, features_dim)
+#
+#     def forward(self, observations: torch.Tensor) -> torch.Tensor:
+#         x = self.cnn(observations)
+#         x = self.adaptive_pool(x)
+#         x = torch.flatten(x, start_dim=1)
+#         x = self.fc(x)
+#         return x
 
 
 def make_env(configure: dict) -> gymnasium.Env:
@@ -245,10 +245,10 @@ if __name__ == "__main__":
 
     env = DummyVecEnv(env_fns)
 
-    policy_kwargs = dict(
-        features_extractor_class=FlexibleImageEncoder,
-        features_extractor_kwargs=dict(features_dim=64),
-    )
+    # policy_kwargs = dict(
+    #     features_extractor_class=FlexibleImageEncoder,
+    #     features_extractor_kwargs=dict(features_dim=64),
+    # )
 
     # dir names
     base_name = "simple-gridworld-ppo"
@@ -264,7 +264,7 @@ if __name__ == "__main__":
         model = PPO.load(newest_model_path, env=env, verbose=1)
     else:
         print("Creating a new model")
-        model = PPO("CnnPolicy", env, policy_kwargs=policy_kwargs, verbose=1)
+        model = PPO("CnnPolicy", env, verbose=1)  # policy_kwargs=policy_kwargs,
 
     for i in range(100):
         model.learn(total_timesteps=500000, progress_bar=True)
