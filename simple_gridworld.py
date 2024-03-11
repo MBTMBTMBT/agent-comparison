@@ -1,3 +1,4 @@
+import collections
 import random
 import time
 
@@ -16,7 +17,7 @@ ACTION_NAMES = {
 }
 
 
-class TextGridWorld(gymnasium.Env):
+class SimpleGridWorld(gymnasium.Env, collections.Iterator):
     """
 
     The TextGridWorld class is an environment class that represents a grid world. The grid world is loaded from a text file, where each character represents a cell in the grid. The grid
@@ -59,7 +60,7 @@ class TextGridWorld(gymnasium.Env):
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
     def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, random_traps=0, make_random=False, max_steps=128):
-        super(TextGridWorld, self).__init__()
+        super(SimpleGridWorld, self).__init__()
         self.random = make_random
         self.max_steps = max_steps
         self.step_count = 0
@@ -329,7 +330,7 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = TextGridWorld('envs/simple_grid/gridworld-empty-traps-7.txt', agent_position=(1, 1), goal_position=(3, 3), random_traps=0)
+    env = SimpleGridWorld('envs/simple_grid/gridworld-empty-traps-7.txt', agent_position=(1, 1), goal_position=(3, 3), random_traps=0)
     obs = env.reset()
     done = False
     reward_sum = 0

@@ -314,7 +314,7 @@ if __name__ == "__main__":
             # Initialize environment
             # env = RGBImgObsWrapper(FullyObsWrapper(
             #     CustomEnvFromFile(txt_file_path=env_file, render_mode='rgb_array', size=None, max_steps=max_ep_len, agent_start_pos=(1,1))))
-            env = simple_gridworld.TextGridWorld(text_file=env_file,)  # agent_position=(1, 1), goal_position=(1, 3))
+            env = simple_gridworld.SimpleGridWorld(text_file=env_file, )  # agent_position=(1, 1), goal_position=(1, 3))
 
             # Run training for the current environment
             # agent.current_epsilon = 0

@@ -3,7 +3,7 @@ from stable_baselines3.common.env_util import DummyVecEnv
 # from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 # import torch.nn as nn
 # import torch
-from simple_gridworld import TextGridWorld
+from simple_gridworld import SimpleGridWorld
 import gymnasium
 # import os
 
@@ -68,7 +68,7 @@ def make_env(configure: dict) -> gymnasium.Env:
             max_steps = configure["max_steps"]
         else:
             max_steps = 128
-        env = TextGridWorld(
+        env = SimpleGridWorld(
             text_file=configure["env_file"],
             cell_size=cell_size,
             obs_size=obs_size,
