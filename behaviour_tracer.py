@@ -3,6 +3,8 @@ from simple_gridworld import SimpleGridWorld
 import torch
 from stable_baselines3 import PPO
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib.cm as cm
 
 
 def non_zero_softmax(x: torch.Tensor, epsilon=1e-10) -> torch.Tensor:
@@ -35,7 +37,7 @@ class TimeStep:
         self.info = info
 
         # get control information
-        self.delta_control_info_tensor: torch.Tensor = self.action_distribution * torch.log2(self.action_distribution / self.prior_action_distribution)
+        self.delta_control_info_tensor: torch.Tensor = torch.abs(self.action_distribution * torch.log2(self.action_distribution / self.prior_action_distribution))
         self.delta_control_info: float = float(torch.sum(self.delta_control_info_tensor))
         self.control_info_sum = previous_control_info_sum + self.delta_control_info
 
@@ -115,7 +117,7 @@ class SimpleGridDeltaInfo:
     ):
         self.env = env
         self.dict_record = {}
-        self.delta_info_grid = torch.zeros_like(self.env.grid, dtype=np.float32)
+        self.delta_info_grid = torch.tensor(np.zeros_like(self.env.grid, dtype=np.float32))
 
     def add(
             self,
@@ -128,8 +130,7 @@ class SimpleGridDeltaInfo:
     ):
         action_distribution = non_zero_softmax(action_distribution)
         prior_action_distribution = non_zero_softmax(prior_action_distribution)
-        delta_control_info_tensor: torch.Tensor = action_distribution * torch.log2(
-            action_distribution / prior_action_distribution)
+        delta_control_info_tensor: torch.Tensor = torch.abs(action_distribution * torch.log2(action_distribution / prior_action_distribution))
         delta_control_info: float = float(torch.sum(delta_control_info_tensor))
         self.dict_record[position] = {
             "action": action,
@@ -145,28 +146,35 @@ class SimpleGridDeltaInfo:
     def plot_grid(self):
         height, width = self.delta_info_grid.shape
         fig, ax = plt.subplots()
-        ax.set_xticks(np.arange(width))
-        ax.set_yticks(np.arange(height))
-        ax.grid(which='both')
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
+        # Initialize with a black background and ensure alpha channel is set for opacity
+        color_grid = np.zeros((height, width, 4))  # RGBA format
+        color_grid[:, :, 3] = 1  # Set alpha channel to 1 for all grid cells
 
-        for i in range(height):
-            for j in range(width):
-                if self.env.grid[i, j] == 1:
-                    ax.add_patch(plt.Rectangle((j, i), 1, 1, color='black'))
-                elif (i, j) in self.dict_record and self.dict_record[(i, j)]['terminated']:
-                    ax.add_patch(plt.Rectangle((j, i), 1, 1, color='green'))
-                elif (i, j) in self.dict_record:
-                    info = self.dict_record[(i, j)]
-                    color_value = 1.0 - min(info['delta_control_info'] / 10, 1.0)
-                    ax.add_patch(plt.Rectangle((j, i), 1, 1, color=(color_value, color_value, color_value)))
-                    ax.text(j + 0.5, i + 0.5, f"{info['delta_control_info']:.2f}",
-                            horizontalalignment='center', verticalalignment='center', color='white')
-                else:
-                    ax.add_patch(plt.Rectangle((j, i), 1, 1, color='black'))
+        delta_min, delta_max = 0, float(torch.max(self.delta_info_grid))
+        norm = mcolors.Normalize(vmin=delta_min, vmax=delta_max)
+        cmap = cm.get_cmap('Blues')
 
-        plt.gca().invert_yaxis()
+        for (i, j), info in self.dict_record.items():
+            if self.env.grid[(i, j)] == 'X':  # Check if the cell is a trap
+                color_grid[i, j] = [1, 0, 0, 1]  # Red for traps
+            elif info['terminated']:
+                color_grid[i, j] = [0, 1, 0, 1]  # Green for terminated states
+            else:
+                delta_info = info['delta_control_info']
+                color_grid[i, j] = cmap(norm(delta_info))[:3] + (1,)
+
+        ax.imshow(color_grid, origin='lower', extent=[0, width, 0, height])
+
+        smappable = cm.ScalarMappable(norm=norm, cmap=cmap)
+        cbar = plt.colorbar(smappable, ax=ax, orientation='vertical', fraction=0.046, pad=0.04)
+        cbar.set_label('Delta Control Info')
+
+        # Now, including traps in the annotation process
+        for (i, j), info in self.dict_record.items():
+            if not info['terminated']:  # Annotations for all non-terminated states, including traps
+                color = 'white' if self.env.grid[(i, j)] == 'X' else 'black'
+                ax.text(j + 0.5, i + 0.5, f"{info['delta_control_info']:.2f}", ha='center', va='center', color=color, fontsize=6)
+
         plt.show()
 
 
@@ -196,9 +204,65 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
                 prior_action_distribution = probs.to(torch.device('cpu')).squeeze()
                 self.record.add(
                     action.item(),
-                    action_distribution.detach().numpy(),
+                    action_distribution.detach(),
                     prior_action.item(),
-                    prior_action_distribution.detach().numpy(),
+                    prior_action_distribution.detach(),
                     terminated,
                     position,
                 )
+
+    def plot_grid(self):
+        self.record.plot_grid()
+
+
+if __name__ == "__main__":
+    from train_baseline import make_env
+    from functools import partial
+    from stable_baselines3.common.env_util import DummyVecEnv
+
+    test_env_configurations = [
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-empty-traps-7.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (3, 3),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 128,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-traps-7.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 256,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-corridors-traps-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": None,
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 128,
+        },
+    ]
+
+    env_fns = [partial(make_env, config) for config in test_env_configurations]
+    env = DummyVecEnv(env_fns)
+    agent = PPO.load("saved-models/simple-gridworld-ppo-44.zip", env=env, verbose=1)
+    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-36.zip", env=env, verbose=1)
+
+    for config in test_env_configurations:
+        test_env = make_env(config)
+        sampler = BaselinePPOSimpleGridBehaviourIterSampler(test_env, agent, prior_agent)
+        sampler.sample()
+        sampler.plot_grid()
