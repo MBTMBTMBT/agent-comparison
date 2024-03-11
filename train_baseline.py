@@ -1,11 +1,7 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import DummyVecEnv
-# from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-# import torch.nn as nn
-# import torch
 from simple_gridworld import SimpleGridWorld
-import gymnasium
-# import os
+import os
 
 
 # class FlexibleImageEncoder(BaseFeaturesExtractor):
