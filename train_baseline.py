@@ -101,6 +101,8 @@ def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models")
     latest_model = model_files[latest_model_index]
     # Extracting the iteration number of the latest model
     latest_model_iteration = iteration_numbers[latest_model_index]
+    if latest_model_iteration is None:
+        latest_model_iteration = -1
     return os.path.join(save_dir, latest_model), latest_model_iteration
 
 
