@@ -163,7 +163,7 @@ class SimpleGridDeltaInfo:
                 delta_info = info['delta_control_info']
                 color_grid[i, j] = cmap(norm(delta_info))[:3] + (1,)
 
-        ax.imshow(color_grid, origin='lower', extent=[0, width, 0, height])
+        ax.imshow(color_grid, origin='upper', extent=[0, width, 0, height])
 
         smappable = cm.ScalarMappable(norm=norm, cmap=cmap)
         cbar = plt.colorbar(smappable, ax=ax, orientation='vertical', fraction=0.046, pad=0.04)
@@ -173,7 +173,81 @@ class SimpleGridDeltaInfo:
         for (i, j), info in self.dict_record.items():
             if not info['terminated']:  # Annotations for all non-terminated states, including traps
                 color = 'white' if self.env.grid[(i, j)] == 'X' else 'black'
-                ax.text(j + 0.5, i + 0.5, f"{info['delta_control_info']:.2f}", ha='center', va='center', color=color, fontsize=6)
+                # Directly use (i, j) for text positioning under origin='upper'
+                ax.text(j + 0.5, height - i - 0.5, f"{info['delta_control_info']:.2f}", ha='center', va='center',
+                        color=color, fontsize=6)
+
+        plt.show()
+
+    def plot_actions(self):
+        height, width = self.delta_info_grid.shape
+        fig, ax = plt.subplots()
+        color_grid = np.zeros((height, width, 4))  # Initialize with a black background
+        color_grid[:, :, 3] = 1  # Set alpha channel to 1
+
+        delta_min, delta_max = 0, float(torch.max(self.delta_info_grid))
+        norm = mcolors.Normalize(vmin=delta_min, vmax=delta_max)
+        cmap = cm.get_cmap('Blues')
+
+        # Draw background color
+        for (i, j), info in self.dict_record.items():
+            if self.env.grid[(i, j)] == 'X':  # Check for traps and mark them in red
+                color_grid[i, j] = [1, 0, 0, 1]
+            elif info['terminated']:
+                color_grid[i, j] = [0, 1, 0, 1]
+            else:
+                color_grid[i, j] = cmap(norm(info['delta_control_info']))[:3] + (1,)
+
+        ax.imshow(color_grid, origin='upper', extent=[0, width, 0, height])
+
+        # Action mapping
+        action_mapping = {
+            0: (0, 1),  # Up
+            1: (0, -1),  # Down
+            2: (-1, 0),  # Left
+            3: (1, 0),  # Right
+        }
+
+        # Scale factors for arrow size, adjust as needed
+        scale_length = 0.5  # Adjust for overall arrow length
+        scale_width = 0.05  # Adjust for overall arrow width
+
+        # Draw arrows for agent and prior actions
+        for (i, j), info in self.dict_record.items():
+            if info['terminated'] or self.env.grid[(i, j)] == 'X':
+                continue  # Skip arrows for terminated states and traps
+
+            start_x = j + 0.5
+            start_y = height - i - 0.5  # Adjusted for origin='upper'
+
+            # Iterate through all actions for each cell for both agent and prior
+            for action in range(4):
+                # Use action probabilities to determine arrow length
+                agent_action_prob = info['action_distribution'][action]
+                prior_action_prob = info['prior_action_distribution'][action]
+
+                dx, dy = action_mapping[action]
+
+                # Agent action arrow
+                if agent_action_prob > 0:  # Draw only if there is a non-zero probability
+                    ax.arrow(start_x, start_y, dx * agent_action_prob * scale_length,
+                             dy * agent_action_prob * scale_length, head_width=scale_width, head_length=scale_width,
+                             fc='gold', ec='orange')
+
+                # Prior action arrow
+                if prior_action_prob > 0:  # Draw only if there is a non-zero probability
+                    # Slightly offset prior arrows for visibility
+                    # ax.arrow(start_x + dx * 0.1, start_y + dy * 0.1, dx * prior_action_prob * scale_length,
+                    #          dy * prior_action_prob * scale_length, head_width=scale_width, head_length=scale_width,
+                    #          fc='lightblue', ec='lightblue')
+                    ax.arrow(start_x, start_y, dx * prior_action_prob * scale_length,
+                             dy * prior_action_prob * scale_length, head_width=scale_width, head_length=scale_width,
+                             fc='lightblue', ec='lightblue')
+
+        # Add legend
+        ax.plot([], [], color='orange', marker='>', markersize=10, label='Agent action', linestyle='None')
+        ax.plot([], [], color='lightblue', marker='>', markersize=10, label='Prior action', linestyle='None')
+        ax.legend(loc='upper right')
 
         plt.show()
 
@@ -196,12 +270,15 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
             if observation is not None and terminated is not None:
                 action, _states = self.agent.predict(observation, deterministic=True)
                 prior_action, _states = self.prior_agent.predict(observation, deterministic=True)
+
                 dis = self.agent.policy.get_distribution(observation.unsqueeze(0).to(torch.device(self.device)))
                 probs = dis.distribution.probs
                 action_distribution = probs.to(torch.device('cpu')).squeeze()
+
                 dis = self.prior_agent.policy.get_distribution(observation.unsqueeze(0).to(torch.device(self.device)))
                 probs = dis.distribution.probs
                 prior_action_distribution = probs.to(torch.device('cpu')).squeeze()
+
                 self.record.add(
                     action.item(),
                     action_distribution.detach(),
@@ -214,6 +291,9 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_grid(self):
         self.record.plot_grid()
 
+    def plot_actions(self):
+        self.record.plot_actions()
+
 
 if __name__ == "__main__":
     from train_baseline import make_env
@@ -221,6 +301,17 @@ if __name__ == "__main__":
     from stable_baselines3.common.env_util import DummyVecEnv
 
     test_env_configurations = [
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-empty-7.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (5, 5),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 128,
+        },
         {
             "env_type": "SimpleGridworld",
             "env_file": "envs/simple_grid/gridworld-empty-traps-7.txt",
@@ -238,7 +329,7 @@ if __name__ == "__main__":
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
-            "goal_position": None,
+            "goal_position": (1, 5),
             "num_random_traps": 0,
             "make_random": True,
             "max_steps": 256,
@@ -249,7 +340,7 @@ if __name__ == "__main__":
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
-            "goal_position": None,
+            "goal_position": (1, 11),
             "num_random_traps": 0,
             "make_random": True,
             "max_steps": 128,
@@ -258,11 +349,12 @@ if __name__ == "__main__":
 
     env_fns = [partial(make_env, config) for config in test_env_configurations]
     env = DummyVecEnv(env_fns)
-    agent = PPO.load("saved-models/simple-gridworld-ppo-44.zip", env=env, verbose=1)
     prior_agent = PPO.load("saved-models/simple-gridworld-ppo-36.zip", env=env, verbose=1)
+    agent = PPO.load("saved-models/simple-gridworld-ppo-48.zip", env=env, verbose=1)
 
     for config in test_env_configurations:
         test_env = make_env(config)
         sampler = BaselinePPOSimpleGridBehaviourIterSampler(test_env, agent, prior_agent)
         sampler.sample()
         sampler.plot_grid()
+        sampler.plot_actions()
