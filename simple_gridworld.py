@@ -89,6 +89,42 @@ class TextGridWorld(gymnasium.Env):
         self.occupied_positions = set()
         self.reset_positions()
 
+        self.shape = self.grid.shape
+        self.iter_index = 0
+        self.iter_coord = (0, 0)
+
+    def __len__(self):
+        return self.shape[0] * self.shape[1]
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.iter_index >= len(self):
+            raise StopIteration
+        row, col = self.iter_coord
+        self.agent_position = self.grid[row][col]
+        col += 1
+        if col >= self.shape[1]:
+            col = 0
+            row += 1
+        self.iter_coord = (row, col)
+        self.iter_index += 1
+
+        if self.grid[self.agent_position] not in ['W']:
+            terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
+            self._render_to_surface()
+            observation = self.get_observation()
+            observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
+            observation /= 255.0 if observation.max() > 1.0 else 1.0
+            return observation, terminated, self.agent_position
+
+        return None, None, self.agent_position
+
+    def reset_iterator(self):
+        self.iter_index = 0
+        self.iter_coord = (0, 0)
+
     def load_grid(self, text_file):
         with open(text_file, 'r') as file:
             lines = file.read().splitlines()
@@ -164,7 +200,7 @@ class TextGridWorld(gymnasium.Env):
             terminated = True
             truncated = True
             reward = 0
-        return observation, reward, terminated, truncated, {}
+        return observation, reward, terminated, truncated, {"position": self.agent_position}
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -184,7 +220,7 @@ class TextGridWorld(gymnasium.Env):
         observation = self.get_observation()
         observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
         observation /= 255.0 if observation.max() > 1.0 else 1.0
-        return observation, {}
+        return observation, {"position": self.agent_position}
 
     def get_observation(self):
         observation = pygame.surfarray.array3d(self.cached_surface)
