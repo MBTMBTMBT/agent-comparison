@@ -222,4 +222,4 @@ if __name__ == "__main__":
             if rendered is not None and action is not None and probs is not None:
                 rendered = test_env.render(mode='rgb_array')
                 trajectory.append((rendered, action.item(), probs))
-            save_trajectory_as_gif(trajectory, rewards, ACTION_NAMES, filename=config["env_file"].split('/')[-1] + f"_trajectory_{i}.gif")
+            save_trajectory_as_gif(trajectory, rewards, ACTION_NAMES, filename=config["env_file"].split('/')[-1] + f"_{base_name}_trajectory_{i}.gif")
