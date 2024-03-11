@@ -104,7 +104,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         if self.iter_index >= len(self):
             raise StopIteration
         row, col = self.iter_coord
-        self.agent_position = self.grid[row][col]
+        self.agent_position = self.iter_coord
         col += 1
         if col >= self.shape[1]:
             col = 0
@@ -112,7 +112,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.iter_coord = (row, col)
         self.iter_index += 1
 
-        if self.grid[self.agent_position] not in ['W']:
+        if self.grid[self.agent_position[0], self.agent_position[1]] not in ['W']:
             terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
             self._render_to_surface()
             observation = self.get_observation()
