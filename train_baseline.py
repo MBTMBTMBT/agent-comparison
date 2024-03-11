@@ -88,7 +88,7 @@ def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models")
     """Find the most recently saved model based on iteration number and custom base name, and return its path and iteration number."""
     model_files = [f for f in os.listdir(save_dir) if f.startswith(base_name) and f.endswith('.zip')]
     if not model_files:
-        return None, None  # Return None for both model path and iteration number if no model files found
+        return None, -1  # Return None for both model path and iteration number if no model files found
     # Extracting iteration numbers
     iteration_numbers = [int(f.replace(base_name + '-', '').split('.')[0]) for f in model_files]
     # Finding the index of the latest model
