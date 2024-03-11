@@ -33,7 +33,7 @@ import gymnasium
 #         return x
 
 
-def make_env(configure: dict) -> gymnasium.Env:
+def make_env(configure: dict) -> SimpleGridWorld:
     env = None
     if configure["env_type"] == "SimpleGridworld":
         if "cell_size" in configure.keys():
@@ -89,13 +89,19 @@ def save_model(model, iteration, base_name="simple-gridworld-ppo", save_dir="sav
 
 
 def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models"):
-    """Find the most recently saved model based on iteration number and custom base name."""
+    """Find the most recently saved model based on iteration number and custom base name, and return its path and iteration number."""
     model_files = [f for f in os.listdir(save_dir) if f.startswith(base_name) and f.endswith('.zip')]
     if not model_files:
-        return None
-    # Extracting iteration numbers and finding the latest model
-    latest_model = max(model_files, key=lambda x: int(x.replace(base_name + '-', '').split('.')[0]))
-    return os.path.join(save_dir, latest_model)
+        return None, None  # Return None for both model path and iteration number if no model files found
+    # Extracting iteration numbers
+    iteration_numbers = [int(f.replace(base_name + '-', '').split('.')[0]) for f in model_files]
+    # Finding the index of the latest model
+    latest_model_index = iteration_numbers.index(max(iteration_numbers))
+    # Getting the latest model file name
+    latest_model = model_files[latest_model_index]
+    # Extracting the iteration number of the latest model
+    latest_model_iteration = iteration_numbers[latest_model_index]
+    return os.path.join(save_dir, latest_model), latest_model_iteration
 
 
 if __name__ == "__main__":
@@ -260,7 +266,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     # Load the newest model based on the custom base name and directory
-    newest_model_path = find_newest_model(base_name=base_name, save_dir=save_dir)
+    newest_model_path, idx = find_newest_model(base_name=base_name, save_dir=save_dir)
     if newest_model_path:
         print(f"Loading model from {newest_model_path}")
         model = PPO.load(newest_model_path, env=env, verbose=1)
@@ -268,7 +274,7 @@ if __name__ == "__main__":
         print("Creating a new model")
         model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)  # policy_kwargs=policy_kwargs,
 
-    for i in range(100):
+    for i in range(idx+1, 100):
         model.learn(total_timesteps=500000, progress_bar=True)
         save_model(model, i, base_name, save_dir)
 
