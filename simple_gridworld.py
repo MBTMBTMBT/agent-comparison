@@ -17,7 +17,7 @@ ACTION_NAMES = {
 }
 
 
-class SimpleGridWorld(gymnasium.Env, collections.Iterator):
+class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     """
 
     The TextGridWorld class is an environment class that represents a grid world. The grid world is loaded from a text file, where each character represents a cell in the grid. The grid
