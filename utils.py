@@ -70,9 +70,9 @@ def create_image_with_action(action_dict: dict[int, str], image, action, q_vals:
     axs[1].bar(actions_labels, q_vals_np, color='skyblue')
 
     # Set the title and labels for the axes
-    axs[1].set_title('Q Values Distribution')
+    axs[1].set_title('Action Distribution')
     axs[1].set_xlabel('Actions')
-    axs[1].set_ylabel('Q Value')
+    axs[1].set_ylabel('Action Value')
 
     # Adjust x-axis to show action labels correctly
     axs[1].set_xticks(range(len(actions_labels)))
