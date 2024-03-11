@@ -211,7 +211,7 @@ if __name__ == "__main__":
         },
         {
             "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt.txt",
+            "env_file": "envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt",
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
