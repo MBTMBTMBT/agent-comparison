@@ -103,6 +103,8 @@ if __name__ == "__main__":
     from simple_gridworld import ACTION_NAMES
     from functools import partial
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
     train_env_configurations = [
         {
             "env_type": "SimpleGridworld",
@@ -282,7 +284,7 @@ if __name__ == "__main__":
             while not (terminated or truncated):
                 rendered = test_env.render(mode='rgb_array')
                 action, _states = model.predict(obs, deterministic=False)
-                dis = model.policy.get_distribution(obs.unsqueeze(0).to(torch.device('cuda')))
+                dis = model.policy.get_distribution(obs.unsqueeze(0).to(torch.device(device)))
                 probs = dis.distribution.probs
                 probs = probs.to(torch.device('cpu')).squeeze()
                 trajectory.append((rendered, action.item(), probs))
