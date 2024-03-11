@@ -178,17 +178,17 @@ if __name__ == "__main__":
             "make_random": True,
             "max_steps": 512,
         },
-        {
-            "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-corridors-13.txt",
-            "cell_size": None,
-            "obs_size": None,
-            "agent_position": None,
-            "goal_position": None,
-            "num_random_traps": 5,
-            "make_random": True,
-            "max_steps": 512,
-        },
+        # {
+        #     "env_type": "SimpleGridworld",
+        #     "env_file": "envs/simple_grid/gridworld-corridors-13.txt",
+        #     "cell_size": None,
+        #     "obs_size": None,
+        #     "agent_position": None,
+        #     "goal_position": None,
+        #     "num_random_traps": 5,
+        #     "make_random": True,
+        #     "max_steps": 512,
+        # },
         {
             "env_type": "SimpleGridworld",
             "env_file": "envs/simple_grid/gridworld-many-rooms-9.txt",
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     # )
 
     # dir names
-    base_name = "simple-gridworld-ppo"
+    base_name = "simple-gridworld-ppo-prior"
     save_dir = "saved-models"
 
     # Create the save directory if it doesn't exist
