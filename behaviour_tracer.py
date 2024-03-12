@@ -297,6 +297,7 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
                     terminated,
                     position,
                 )
+        self.env.iter_reset()
 
     def plot_grid(self, filepath):
         self.record.plot_grid(filepath)
