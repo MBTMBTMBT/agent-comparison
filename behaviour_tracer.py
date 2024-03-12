@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 
+import networkx as nx
+
 
 def non_zero_softmax(x: torch.Tensor, epsilon=1e-10) -> torch.Tensor:
     x += epsilon
@@ -185,6 +187,50 @@ class SimpleGridDeltaInfo:
         plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
         plt.close()
 
+    def plot_graph(self, graph, filepath):
+        fig, ax = plt.subplots()
+        # Assuming `graph` is a NetworkX graph where nodes are tuples (i, j)
+        pos = {node: (node[1], -node[0]) for node in graph.nodes()}  # Inverting y to match image origin='upper'
+        # pos = nx.kamada_kawai_layout(graph)
+
+        # Initialize node color list and labels dict
+        node_colors = []
+        labels = {}
+
+        delta_min, delta_max = 0, float(torch.max(self.delta_info_grid))
+        norm = mcolors.Normalize(vmin=delta_min, vmax=delta_max)
+        cmap = cm.get_cmap('Blues')
+
+        for node in graph.nodes:
+            i, j = node
+            if self.env.grid[(i, j)] == 'X':
+                node_colors.append([1, 0, 0, 1])  # Red for traps
+                # Label with delta control info
+                labels[node] = f"{self.dict_record[(i, j)]['delta_control_info']:.2f}"
+            elif self.dict_record[(i, j)]['terminated']:
+                node_colors.append([0, 1, 0, 1])  # Green for terminated states
+            else:
+                delta_info = self.dict_record[(i, j)]['delta_control_info']
+                node_colors.append(cmap(norm(delta_info))[:3] + (1,))  # Color based on delta_info
+                # Label with delta control info
+                labels[node] = f"{self.dict_record[(i, j)]['delta_control_info']:.2f}"
+
+        # Drawing
+        plt.figure(figsize=(8, 8))
+        nx.draw_networkx_edges(graph, pos)
+        nx.draw_networkx_nodes(graph, pos, node_color=node_colors, node_size=100, edgecolors='black')
+        nx.draw_networkx_labels(graph, pos, labels, font_size=8, font_color='black')
+
+        # Colorbar for delta control info
+        smappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+        plt.colorbar(smappable, ax=ax, orientation='vertical', label='Delta Control Info')
+
+        # Create directory if it does not exist
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # Save the figure
+        plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
+        plt.close()
+
     def plot_actions(self, filepath):
         height, width = self.delta_info_grid.shape
         fig, ax = plt.subplots()
@@ -305,6 +351,9 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_actions(self, filepath):
         self.record.plot_actions(filepath)
 
+    def plot_graph(self, graph, filepath):
+        self.record.plot_graph(graph, filepath)
+
 
 if __name__ == "__main__":
     from train_baseline import make_env
@@ -402,3 +451,4 @@ if __name__ == "__main__":
         sampler.sample()
         sampler.plot_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_delta-info.png")
         sampler.plot_actions(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_action.png")
+        sampler.plot_graph(test_env.make_directed_graph(), f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_graph.png")
