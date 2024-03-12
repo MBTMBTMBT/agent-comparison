@@ -140,7 +140,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                     reachable_positions.append(potential_neighbour)
         return reachable_positions
 
-    def make_directed_graph(self):
+    def make_directed_graph(self, filepath: None or str = None):
         graph = nx.DiGraph()
         node_colors = {}  # Dictionary to store colors keyed by node
 
@@ -160,12 +160,15 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                 else:
                     node_colors[node] = 'blue'  # Default color for other nodes
 
-        # Apply the colors when drawing
-        colors = [node_colors.get(node, 'blue') for node in graph.nodes()]
-        pos = nx.kamada_kawai_layout(graph)  # Positions for all nodes
-        node_sizes = [100 for n in graph.nodes()]
-        nx.draw(graph, pos, with_labels=True, arrows=True, node_color=colors, node_size=node_sizes, font_size=8, )
-        plt.show()
+        if filepath is not None:
+            # Apply the colors when drawing
+            colors = [node_colors.get(node, 'blue') for node in graph.nodes()]
+            pos = nx.kamada_kawai_layout(graph)  # Positions for all nodes
+            node_sizes = [100 for n in graph.nodes()]
+            nx.draw(graph, pos, with_labels=True, arrows=True, node_color=colors, node_size=node_sizes, font_size=8, )
+            # plt.show()
+            plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
+            plt.close()
 
     def reset_iterator(self):
         self.iter_index = 0
