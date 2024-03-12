@@ -170,6 +170,8 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
             plt.close()
 
+        return graph
+
     def reset_iterator(self):
         self.iter_index = 0
         self.iter_coord = (0, 0)
