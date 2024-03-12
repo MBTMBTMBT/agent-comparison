@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from simple_gridworld import SimpleGridWorld
 import torch
@@ -37,7 +39,7 @@ class TimeStep:
         self.info = info
 
         # get control information
-        self.delta_control_info_tensor: torch.Tensor = torch.abs(self.action_distribution * torch.log2(self.action_distribution / self.prior_action_distribution))
+        self.delta_control_info_tensor: torch.Tensor = self.action_distribution * torch.log2(self.action_distribution / self.prior_action_distribution)
         self.delta_control_info: float = float(torch.sum(self.delta_control_info_tensor))
         self.control_info_sum = previous_control_info_sum + self.delta_control_info
 
@@ -130,7 +132,7 @@ class SimpleGridDeltaInfo:
     ):
         action_distribution = non_zero_softmax(action_distribution)
         prior_action_distribution = non_zero_softmax(prior_action_distribution)
-        delta_control_info_tensor: torch.Tensor = torch.abs(action_distribution * torch.log2(action_distribution / prior_action_distribution))
+        delta_control_info_tensor: torch.Tensor = action_distribution * torch.log2(action_distribution / prior_action_distribution)
         delta_control_info: float = float(torch.sum(delta_control_info_tensor))
         self.dict_record[position] = {
             "action": action,
@@ -143,7 +145,7 @@ class SimpleGridDeltaInfo:
         }
         self.delta_info_grid[position] = delta_control_info
 
-    def plot_grid(self):
+    def plot_grid(self, filepath):
         height, width = self.delta_info_grid.shape
         fig, ax = plt.subplots()
         # Initialize with a black background and ensure alpha channel is set for opacity
@@ -177,9 +179,13 @@ class SimpleGridDeltaInfo:
                 ax.text(j + 0.5, height - i - 0.5, f"{info['delta_control_info']:.2f}", ha='center', va='center',
                         color=color, fontsize=6)
 
-        plt.show()
+        # Create directory if it does not exist
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # Save the figure
+        plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
+        plt.close()
 
-    def plot_actions(self):
+    def plot_actions(self, filepath):
         height, width = self.delta_info_grid.shape
         fig, ax = plt.subplots()
         color_grid = np.zeros((height, width, 4))  # Initialize with a black background
@@ -214,7 +220,7 @@ class SimpleGridDeltaInfo:
 
         # Draw arrows for agent and prior actions
         for (i, j), info in self.dict_record.items():
-            if info['terminated'] or self.env.grid[(i, j)] == 'X':
+            if info['terminated']:  # or self.env.grid[(i, j)] == 'X':
                 continue  # Skip arrows for terminated states and traps
 
             start_x = j + 0.5
@@ -249,7 +255,11 @@ class SimpleGridDeltaInfo:
         ax.plot([], [], color='lightblue', marker='>', markersize=10, label='Prior action', linestyle='None')
         ax.legend(loc='upper right')
 
-        plt.show()
+        # Create directory if it does not exist
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # Save the figure
+        plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
+        plt.close()
 
 
 class BaselinePPOSimpleGridBehaviourIterSampler:
@@ -288,11 +298,11 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
                     position,
                 )
 
-    def plot_grid(self):
-        self.record.plot_grid()
+    def plot_grid(self, filepath):
+        self.record.plot_grid(filepath)
 
-    def plot_actions(self):
-        self.record.plot_actions()
+    def plot_actions(self, filepath):
+        self.record.plot_actions(filepath)
 
 
 if __name__ == "__main__":
@@ -340,21 +350,54 @@ if __name__ == "__main__":
             "cell_size": None,
             "obs_size": None,
             "agent_position": None,
-            "goal_position": (1, 11),
+            "goal_position": (1, 1),
             "num_random_traps": 0,
             "make_random": True,
             "max_steps": 128,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-corridors-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (1, 1),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 512,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (1, 1),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 512,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (1, 1),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 512,
         },
     ]
 
     env_fns = [partial(make_env, config) for config in test_env_configurations]
     env = DummyVecEnv(env_fns)
-    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-36.zip", env=env, verbose=1)
-    agent = PPO.load("saved-models/simple-gridworld-ppo-48.zip", env=env, verbose=1)
+    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-prior-149.zip", env=env, verbose=1)
+    agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
 
     for config in test_env_configurations:
         test_env = make_env(config)
         sampler = BaselinePPOSimpleGridBehaviourIterSampler(test_env, agent, prior_agent)
         sampler.sample()
-        sampler.plot_grid()
-        sampler.plot_actions()
+        sampler.plot_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_delta-info.png")
+        sampler.plot_actions(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_action.png")
