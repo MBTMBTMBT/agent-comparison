@@ -224,7 +224,7 @@ if __name__ == "__main__":
         print("Creating a new model")
         model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)  # policy_kwargs=policy_kwargs,
 
-    for i in range(idx+1, 100):
+    for i in range(idx+1, 150):
         model.learn(total_timesteps=100000, progress_bar=True)
         save_model(model, i, base_name, save_dir)
 
