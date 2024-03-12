@@ -8,6 +8,8 @@ import torch
 from gymnasium import spaces
 import numpy as np
 from torchvision.transforms import transforms
+import networkx as nx
+import matplotlib.pyplot as plt
 
 ACTION_NAMES = {
     0: 'UP',
@@ -75,7 +77,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self._goal_position = goal_position
 
         self.num_random_traps = random_traps
-        self.pos_ramdom_traps = []
+        self.pos_random_traps = []
 
         self.agent_position = None
         self.goal_position = None
@@ -122,6 +124,49 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         return None, None, self.agent_position
 
+    def iter_reset(self):
+        self.iter_index = 0
+        self.iter_coord = (0, 0)
+
+    def directed_reachable_positions(self, position: tuple[int, int]) -> list[tuple[int, int]]:
+        x, y = position
+        potential_neighbours = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]  # Neighbors are up, down, left, right
+        reachable_positions = []
+        if self.grid[x, y] in ['W'] or position == self.goal_position:
+            return reachable_positions
+        for potential_neighbour in potential_neighbours:
+            if 0 <= potential_neighbour[0] < self.grid.shape[0] and 0 <= potential_neighbour[1] < self.grid.shape[1]:
+                if self.grid[potential_neighbour[0], potential_neighbour[1]] not in ['W']:
+                    reachable_positions.append(potential_neighbour)
+        return reachable_positions
+
+    def make_directed_graph(self):
+        graph = nx.DiGraph()
+        node_colors = {}  # Dictionary to store colors keyed by node
+
+        for x in range(self.grid.shape[0]):
+            for y in range(self.grid.shape[1]):
+                node = (x, y)
+                if self.grid[x, y] not in ['W']:
+                    graph.add_node(node)
+                    for neighbor in self.directed_reachable_positions(node):
+                        graph.add_edge(node, neighbor)
+
+                # Assign colors based on conditions, directly using the node as a key
+                if self.grid[x, y] in ['X'] or node in self.pos_random_traps:
+                    node_colors[node] = 'red'  # Trap position
+                elif node == self.goal_position or node == self._goal_position:
+                    node_colors[node] = 'green'  # Goal position
+                else:
+                    node_colors[node] = 'blue'  # Default color for other nodes
+
+        # Apply the colors when drawing
+        colors = [node_colors.get(node, 'blue') for node in graph.nodes()]
+        pos = nx.kamada_kawai_layout(graph)  # Positions for all nodes
+        node_sizes = [100 for n in graph.nodes()]
+        nx.draw(graph, pos, with_labels=True, arrows=True, node_color=colors, node_size=node_sizes, font_size=8, )
+        plt.show()
+
     def reset_iterator(self):
         self.iter_index = 0
         self.iter_coord = (0, 0)
@@ -155,11 +200,11 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.goal_position = self._goal_position if self._goal_position else self.assign_position()
         self.occupied_positions.add(self.goal_position)
 
-        self.pos_ramdom_traps = []
+        self.pos_random_traps = []
         for i in range(random.randint(0, self.num_random_traps)):
             try:
                 trap = self.assign_position()
-                self.pos_ramdom_traps.append(trap)
+                self.pos_random_traps.append(trap)
                 self.occupied_positions.add(trap)
             except RuntimeError:
                 print("Warning: Not enough empty position assignable for random traps.")
@@ -189,7 +234,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_ramdom_traps) else -0.01
+        reward = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
         if hits_wall:
             reward -= 0.1
 
@@ -241,7 +286,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                 rect = pygame.Rect(x * self.cell_size[0], y * self.cell_size[1], self.cell_size[0], self.cell_size[1])
                 if cell_content == 'W':
                     pygame.draw.rect(self.viewer, (0, 0, 0), rect)
-                elif cell_content == 'X' or (y, x) in self.pos_ramdom_traps:
+                elif cell_content == 'X' or (y, x) in self.pos_random_traps:
                     pygame.draw.rect(self.viewer, (255, 0, 0), rect)
 
         goal_rect = pygame.Rect(self.goal_position[1] * self.cell_size[0], self.goal_position[0] * self.cell_size[1],
@@ -330,7 +375,9 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-empty-traps-7.txt', agent_position=(1, 1), goal_position=(3, 3), random_traps=0)
+    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-traps-13.txt', agent_position=(1, 1), goal_position=(3, 3), random_traps=0)
+    env.make_directed_graph()
+    exit()
     obs = env.reset()
     done = False
     reward_sum = 0
