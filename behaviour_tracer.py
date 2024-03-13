@@ -1,5 +1,6 @@
 import os
 
+import networkx
 import numpy as np
 from simple_gridworld import SimpleGridWorld
 import torch
@@ -9,6 +10,8 @@ import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 
 import networkx as nx
+
+from scipy.cluster.hierarchy import linkage
 
 
 def non_zero_softmax(x: torch.Tensor, epsilon=1e-10) -> torch.Tensor:
@@ -41,7 +44,8 @@ class TimeStep:
         self.info = info
 
         # get control information
-        self.delta_control_info_tensor: torch.Tensor = self.action_distribution * torch.log2(self.action_distribution / self.prior_action_distribution)
+        self.delta_control_info_tensor: torch.Tensor = self.action_distribution * torch.log2(
+            self.action_distribution / self.prior_action_distribution)
         self.delta_control_info: float = float(torch.sum(self.delta_control_info_tensor))
         self.control_info_sum = previous_control_info_sum + self.delta_control_info
 
@@ -94,17 +98,17 @@ class BehaviourTrajectory:
 
     def conclude_trajectory(self) -> dict:
         conclusion = {
-                'obs': [],
-                'action': [],
-                'action_distribution': [],
-                'prior_action': [],
-                'prior_action_distribution': [],
-                'reward': [],
-                'done': [],
-                'info': [],
-                'delta_control_info_tensor': [],
-                'delta_control_info': [],
-                'control_info_sum': [],
+            'obs': [],
+            'action': [],
+            'action_distribution': [],
+            'prior_action': [],
+            'prior_action_distribution': [],
+            'reward': [],
+            'done': [],
+            'info': [],
+            'delta_control_info_tensor': [],
+            'delta_control_info': [],
+            'control_info_sum': [],
         }
         for time_step in self.trajectory:
             dict_time_tep = time_step.to_dict()
@@ -122,6 +126,12 @@ class SimpleGridDeltaInfo:
         self.env = env
         self.dict_record = {}
         self.delta_info_grid = torch.tensor(np.zeros_like(self.env.grid, dtype=np.float32))
+        self.num_actions: int = self.env.num_actions
+        self.delta_info_times_action_distribution = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions,),
+                                                                dtype=torch.float32)
+        self.grid_feature_vectors = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions,),
+                                                dtype=torch.float32)
+        self.available_positions: list[tuple[int, int]] = []
 
     def add(
             self,
@@ -134,7 +144,8 @@ class SimpleGridDeltaInfo:
     ):
         action_distribution = non_zero_softmax(action_distribution)
         prior_action_distribution = non_zero_softmax(prior_action_distribution)
-        delta_control_info_tensor: torch.Tensor = action_distribution * torch.log2(action_distribution / prior_action_distribution)
+        delta_control_info_tensor: torch.Tensor = action_distribution * torch.log2(
+            action_distribution / prior_action_distribution)
         delta_control_info: float = float(torch.sum(delta_control_info_tensor))
         self.dict_record[position] = {
             "action": action,
@@ -146,6 +157,45 @@ class SimpleGridDeltaInfo:
             "delta_control_info": delta_control_info
         }
         self.delta_info_grid[position] = delta_control_info
+        self.delta_info_times_action_distribution[position, :] = delta_control_info * action_distribution
+        self.available_positions.append(position)
+        self.grid_feature_vectors[position, :] = self.delta_info_times_action_distribution[position, :]
+
+    def compute_distance_vector(self) -> tuple[list[float], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[tuple[tuple[int, int], tuple[int, int]], int]]:
+        grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
+
+        # Extract vectors from available positions
+        vectors = np.array([grid_feature_vectors[x, y] for x, y in self.available_positions])
+
+        # Compute pairwise distances using broadcasting
+        diff = vectors[:, np.newaxis, :] - vectors[np.newaxis, :, :]
+        distances = np.sqrt(np.sum(diff ** 2, axis=-1))
+
+        # Flatten the upper triangle of the distance matrix to get the condensed distance vector
+        i_upper = np.triu_indices(len(self.available_positions), k=1)
+        distances = distances[i_upper].tolist()
+
+        # Create mapping dictionaries
+        serial_to_pairs = {}
+        pairs_to_serial = {}
+        for i, (pos1_idx, pos2_idx) in enumerate(zip(*i_upper)):
+            pos1 = self.available_positions[pos1_idx]
+            pos2 = self.available_positions[pos2_idx]
+
+            # Map serial number to position pairs
+            serial_to_pairs[i] = (pos1, pos2)
+
+            # Map position pairs (as unordered) to serial number
+            pairs_to_serial[(pos1, pos2)] = i
+            pairs_to_serial[(pos2, pos1)] = i
+
+        return distances, serial_to_pairs, pairs_to_serial
+
+    def compute_linkages(self):
+        distance_vector, serial_to_pos, pos_to_serial = self.compute_distance_vector()
+        connection_graph = self.env.make_directed_graph()
+        strongly_connected_components = list(nx.strongly_connected_components(connection_graph))
+        linkage = linkage(distance_vector, method='ward')
 
     def plot_grid(self, filepath):
         height, width = self.delta_info_grid.shape
@@ -187,7 +237,8 @@ class SimpleGridDeltaInfo:
         plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
         plt.close()
 
-    def plot_graph(self, graph, filepath):
+    def plot_graph(self, filepath):
+        graph = self.env.make_directed_graph()
         fig, ax = plt.subplots()
         # Assuming `graph` is a NetworkX graph where nodes are tuples (i, j)
         pos = {node: (node[1], -node[0]) for node in graph.nodes()}  # Inverting y to match image origin='upper'
@@ -351,8 +402,8 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_actions(self, filepath):
         self.record.plot_actions(filepath)
 
-    def plot_graph(self, graph, filepath):
-        self.record.plot_graph(graph, filepath)
+    def plot_graph(self, filepath):
+        self.record.plot_graph(filepath)
 
 
 if __name__ == "__main__":
@@ -451,4 +502,4 @@ if __name__ == "__main__":
         sampler.sample()
         sampler.plot_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_delta-info.png")
         sampler.plot_actions(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_action.png")
-        sampler.plot_graph(test_env.make_directed_graph(), f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_graph.png")
+        sampler.plot_graph(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_graph.png")
