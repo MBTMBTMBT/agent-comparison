@@ -11,7 +11,7 @@ import matplotlib.cm as cm
 
 import networkx as nx
 
-from scipy.cluster.hierarchy import linkage
+from scipy.cluster.hierarchy import linkage, fcluster
 
 
 def non_zero_softmax(x: torch.Tensor, epsilon=1e-10) -> torch.Tensor:
@@ -161,7 +161,7 @@ class SimpleGridDeltaInfo:
         self.available_positions.append(position)
         self.grid_feature_vectors[position, :] = self.delta_info_times_action_distribution[position, :]
 
-    def compute_distance_vector(self) -> tuple[list[float], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[tuple[tuple[int, int], tuple[int, int]], int]]:
+    def compute_distances(self) -> tuple[list[float], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[tuple[tuple[int, int], tuple[int, int]], int]]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
 
         # Extract vectors from available positions
@@ -192,10 +192,26 @@ class SimpleGridDeltaInfo:
         return distances, serial_to_pairs, pairs_to_serial
 
     def compute_linkages(self):
-        distance_vector, serial_to_pos, pos_to_serial = self.compute_distance_vector()
+        distances, serial_to_pairs, pairs_to_serial = self.compute_distances()
         connection_graph = self.env.make_directed_graph()
-        strongly_connected_components = list(nx.strongly_connected_components(connection_graph))
-        linkage = linkage(distance_vector, method='ward')
+
+        # Find bidirectionally connected pairs
+        bidirectional_pairs = {(u, v) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)}
+        bidirectional_pairs.update({(v, u) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)})
+
+        for i in serial_to_pairs.keys():
+            if serial_to_pairs[i] not in bidirectional_pairs:
+                distances[i] = np.inf
+
+        distances = np.array(distances, dtype=np.float32)
+
+        # Perform hierarchical clustering
+        links = linkage(distances, method='single')
+
+        # Decide the number of clusters or a cutoff to form clusters
+        # clusters = fcluster(links, t=1.5, criterion='distance')
+
+        return links
 
     def plot_grid(self, filepath):
         height, width = self.delta_info_grid.shape
