@@ -86,6 +86,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.obs_size = obs_size  # H, W
         self.observation_space = spaces.Box(low=0, high=1, shape=(3, obs_size[0], obs_size[1]), dtype=np.uint8)
         self.action_space = spaces.Discrete(len(ACTION_NAMES))
+        self.num_actions = len(ACTION_NAMES)
 
         pygame.init()
 
