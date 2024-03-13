@@ -1,6 +1,7 @@
 import os
 
-import networkx
+import imageio
+from PIL import Image
 import numpy as np
 from simple_gridworld import SimpleGridWorld
 import torch
@@ -8,7 +9,7 @@ from stable_baselines3 import PPO
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-
+from io import BytesIO
 import networkx as nx
 
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -161,7 +162,9 @@ class SimpleGridDeltaInfo:
         self.available_positions.append(position)
         self.grid_feature_vectors[position, :] = self.delta_info_times_action_distribution[position, :]
 
-    def compute_distances(self) -> tuple[list[float], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[tuple[tuple[int, int], tuple[int, int]], int]]:
+    def compute_distances(self) -> tuple[
+        list[float or np.inf], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[
+            tuple[tuple[int, int], tuple[int, int]], int]]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
 
         # Extract vectors from available positions
@@ -179,8 +182,8 @@ class SimpleGridDeltaInfo:
         serial_to_pairs = {}
         pairs_to_serial = {}
         for i, (pos1_idx, pos2_idx) in enumerate(zip(*i_upper)):
-            pos1 = self.available_positions[pos1_idx]
-            pos2 = self.available_positions[pos2_idx]
+            pos1: tuple[int, int] = self.available_positions[pos1_idx]
+            pos2: tuple[int, int] = self.available_positions[pos2_idx]
 
             # Map serial number to position pairs
             serial_to_pairs[i] = (pos1, pos2)
@@ -191,7 +194,7 @@ class SimpleGridDeltaInfo:
 
         return distances, serial_to_pairs, pairs_to_serial
 
-    def compute_linkages(self):
+    def compute_linkages(self, return_info=False):
         distances, serial_to_pairs, pairs_to_serial = self.compute_distances()
         connection_graph = self.env.make_directed_graph()
 
@@ -201,15 +204,22 @@ class SimpleGridDeltaInfo:
 
         for i in serial_to_pairs.keys():
             if serial_to_pairs[i] not in bidirectional_pairs:
-                distances[i] = np.inf
+                distances[i] = -1
 
         distances = np.array(distances, dtype=np.float32)
+
+        max_distance = np.max(distances)
+        large_distance_value = max_distance * 10  # Example: 10 times the max distance
+        distances = np.where(distances == -1, large_distance_value, distances)
 
         # Perform hierarchical clustering
         links = linkage(distances, method='single')
 
         # Decide the number of clusters or a cutoff to form clusters
         # clusters = fcluster(links, t=1.5, criterion='distance')
+
+        if return_info:
+            return links, distances, serial_to_pairs, pairs_to_serial
 
         return links
 
@@ -252,6 +262,60 @@ class SimpleGridDeltaInfo:
         # Save the figure
         plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
         plt.close()
+
+    def plot_classified_grid(self, links: np.ndarray,
+                             serial_to_pairs: dict[int, tuple[tuple[int, int], tuple[int, int]]], filepath):
+        max_num_groups = links.shape[0] + 1
+        min_num_groups = 1
+        frames = []  # List to store frames for the GIF
+        for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
+            clusters = fcluster(links, t=g, criterion='maxclust')
+            position_to_cluster = {}
+            for i, cluster_label in enumerate(clusters):
+                pos_pair = serial_to_pairs[i]
+                for pos in pos_pair:
+                    position_to_cluster[pos] = cluster_label
+
+            height, width = self.delta_info_grid.shape
+            fig, ax = plt.subplots()
+            color_grid = np.full((height, width, 4), (0, 0, 0, 1))  # Initialize with black background
+
+            # Generate a color for each cluster
+            unique_clusters = np.unique(clusters)
+            colors = cm.get_cmap('gist_rainbow', len(unique_clusters))
+
+            for pos, cluster_label in position_to_cluster.items():
+                color_grid[pos] = colors(cluster_label - 1)[:3] + (1,)  # Set RGB and keep alpha=1
+
+            for (i, j), info in self.dict_record.items():
+                if (i, j) not in position_to_cluster:  # Keep original color if not in position_to_cluster
+                    if self.env.grid[(i, j)] == 'X':
+                        color_grid[i, j] = [1, 0, 0, 1]  # Red for traps
+                    elif info['terminated']:
+                        color_grid[i, j] = [0, 1, 0, 1]  # Green for terminated states
+                    else:
+                        # Keep the original color based on delta_control_info
+                        pass
+
+            ax.imshow(color_grid, origin='upper', extent=[0, width, 0, height])
+            ax.set_title(f'Total Classes: {len(unique_clusters)}')
+
+            # Change label to group index
+            for pos, cluster_label in position_to_cluster.items():
+                ax.text(pos[1] + 0.5, height - pos[0] - 0.5, str(cluster_label), ha='center', va='center',
+                        color='white', fontsize=6)
+
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+            fig.canvas.draw()
+            frame = np.array(fig.canvas.renderer.buffer_rgba())
+            frames.append(frame)
+            plt.close(fig)
+
+        # Create GIF
+        imageio.mimsave(filepath, frames, fps=2)
+
 
     def plot_graph(self, filepath):
         graph = self.env.make_directed_graph()
@@ -421,6 +485,10 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_graph(self, filepath):
         self.record.plot_graph(filepath)
 
+    def plot_classified_grid(self, filepath):
+        links, distances, serial_to_pairs, pairs_to_serial = self.record.compute_linkages(return_info=True)
+        self.record.plot_classified_grid(links, serial_to_pairs, filepath)
+
 
 if __name__ == "__main__":
     from train_baseline import make_env
@@ -519,3 +587,4 @@ if __name__ == "__main__":
         sampler.plot_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_delta-info.png")
         sampler.plot_actions(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_action.png")
         sampler.plot_graph(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_graph.png")
+        sampler.plot_classified_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_classification.gif")
