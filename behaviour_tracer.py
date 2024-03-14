@@ -173,9 +173,12 @@ class SimpleGridDeltaInfo:
             "delta_control_info": delta_control_info
         }
         self.delta_info_grid[position] = delta_control_info
-        self.delta_info_times_action_distribution[position, :] = delta_control_info * action_distribution
+        # if position == (4, 2):
+        #     x = delta_control_info * action_distribution
+        #     pass
+        self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution
         self.available_positions.append(position)
-        self.grid_feature_vectors[position, :] = self.delta_info_times_action_distribution[position, :]
+        self.grid_feature_vectors[position] = self.delta_info_times_action_distribution[position]
 
     def _compute_distances(self) -> tuple[
         list[float or np.inf], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[
@@ -220,6 +223,11 @@ class SimpleGridDeltaInfo:
 
         distances = {}
         for u, v in bidirectional_pairs:
+            # if u == (4, 2) or v == (4, 2):
+            #     vector_u = grid_feature_vectors[u]
+            #     vector_v = grid_feature_vectors[v]
+            #     val = np.sqrt(np.sum((vector_u - vector_v) ** 2)).item()
+            #     pass
             vector_u = grid_feature_vectors[u]
             vector_v = grid_feature_vectors[v]
             distances[frozenset((u, v))] = np.sqrt(np.sum((vector_u - vector_v) ** 2)).item()
@@ -339,7 +347,7 @@ class SimpleGridDeltaInfo:
                 if len(merge_sequence) == 0:
                     print("Warning: More groups kept than expected.")
                     break
-                while len(merge_sequence) >= 0:
+                while len(merge_sequence) > 0:
                     pair_to_merge = merge_sequence.pop(0)
                     _length = len(clusters)
                     clusters = _merge(pair_to_merge, clusters)
@@ -586,61 +594,61 @@ if __name__ == "__main__":
     from stable_baselines3.common.env_util import DummyVecEnv
 
     test_env_configurations = [
-        {
-            "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-empty-7.txt",
-            "cell_size": None,
-            "obs_size": None,
-            "agent_position": None,
-            "goal_position": (5, 5),
-            "num_random_traps": 0,
-            "make_random": True,
-            "max_steps": 128,
-        },
-        {
-            "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-empty-traps-7.txt",
-            "cell_size": None,
-            "obs_size": None,
-            "agent_position": None,
-            "goal_position": (3, 3),
-            "num_random_traps": 0,
-            "make_random": True,
-            "max_steps": 128,
-        },
-        {
-            "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-maze-traps-7.txt",
-            "cell_size": None,
-            "obs_size": None,
-            "agent_position": None,
-            "goal_position": (1, 5),
-            "num_random_traps": 0,
-            "make_random": True,
-            "max_steps": 256,
-        },
-        {
-            "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-corridors-traps-13.txt",
-            "cell_size": None,
-            "obs_size": None,
-            "agent_position": None,
-            "goal_position": (1, 1),
-            "num_random_traps": 0,
-            "make_random": True,
-            "max_steps": 128,
-        },
-        {
-            "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-corridors-13.txt",
-            "cell_size": None,
-            "obs_size": None,
-            "agent_position": None,
-            "goal_position": (1, 1),
-            "num_random_traps": 0,
-            "make_random": True,
-            "max_steps": 512,
-        },
+        # {
+        #     "env_type": "SimpleGridworld",
+        #     "env_file": "envs/simple_grid/gridworld-empty-7.txt",
+        #     "cell_size": None,
+        #     "obs_size": None,
+        #     "agent_position": None,
+        #     "goal_position": (5, 5),
+        #     "num_random_traps": 0,
+        #     "make_random": True,
+        #     "max_steps": 128,
+        # },
+        # {
+        #     "env_type": "SimpleGridworld",
+        #     "env_file": "envs/simple_grid/gridworld-empty-traps-7.txt",
+        #     "cell_size": None,
+        #     "obs_size": None,
+        #     "agent_position": None,
+        #     "goal_position": (3, 3),
+        #     "num_random_traps": 0,
+        #     "make_random": True,
+        #     "max_steps": 128,
+        # },
+        # {
+        #     "env_type": "SimpleGridworld",
+        #     "env_file": "envs/simple_grid/gridworld-maze-traps-7.txt",
+        #     "cell_size": None,
+        #     "obs_size": None,
+        #     "agent_position": None,
+        #     "goal_position": (1, 5),
+        #     "num_random_traps": 0,
+        #     "make_random": True,
+        #     "max_steps": 256,
+        # },
+        # {
+        #     "env_type": "SimpleGridworld",
+        #     "env_file": "envs/simple_grid/gridworld-corridors-traps-13.txt",
+        #     "cell_size": None,
+        #     "obs_size": None,
+        #     "agent_position": None,
+        #     "goal_position": (1, 1),
+        #     "num_random_traps": 0,
+        #     "make_random": True,
+        #     "max_steps": 128,
+        # },
+        # {
+        #     "env_type": "SimpleGridworld",
+        #     "env_file": "envs/simple_grid/gridworld-corridors-13.txt",
+        #     "cell_size": None,
+        #     "obs_size": None,
+        #     "agent_position": None,
+        #     "goal_position": (1, 1),
+        #     "num_random_traps": 0,
+        #     "make_random": True,
+        #     "max_steps": 512,
+        # },
         {
             "env_type": "SimpleGridworld",
             "env_file": "envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt",
@@ -652,17 +660,17 @@ if __name__ == "__main__":
             "make_random": True,
             "max_steps": 512,
         },
-        {
-            "env_type": "SimpleGridworld",
-            "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
-            "cell_size": None,
-            "obs_size": None,
-            "agent_position": None,
-            "goal_position": (1, 1),
-            "num_random_traps": 0,
-            "make_random": True,
-            "max_steps": 512,
-        },
+        # {
+        #     "env_type": "SimpleGridworld",
+        #     "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
+        #     "cell_size": None,
+        #     "obs_size": None,
+        #     "agent_position": None,
+        #     "goal_position": (1, 1),
+        #     "num_random_traps": 0,
+        #     "make_random": True,
+        #     "max_steps": 512,
+        # },
     ]
 
     env_fns = [partial(make_env, config) for config in test_env_configurations]
