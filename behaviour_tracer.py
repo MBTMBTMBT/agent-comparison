@@ -119,6 +119,21 @@ class BehaviourTrajectory:
         return conclusion
 
 
+def _merge(pair_to_merge: frozenset, clusters: set[frozenset[tuple[int, int]]]) -> set[frozenset[tuple[int, int]]]:
+    u, v = pair_to_merge
+    u_group, v_group = None, None
+    for group in clusters:
+        if u in group:
+            u_group = group
+        if v in group:
+            v_group = group
+        if u_group is not None and v_group is not None:
+            new_clusters = clusters - {u_group, v_group}  # Remove the old groups
+            new_clusters.add(u_group.union(v_group))  # Add the merged group
+            return new_clusters
+    return clusters
+
+
 class SimpleGridDeltaInfo:
     def __init__(
             self,
@@ -162,7 +177,7 @@ class SimpleGridDeltaInfo:
         self.available_positions.append(position)
         self.grid_feature_vectors[position, :] = self.delta_info_times_action_distribution[position, :]
 
-    def compute_distances(self) -> tuple[
+    def _compute_distances(self) -> tuple[
         list[float or np.inf], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[
             tuple[tuple[int, int], tuple[int, int]], int]]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
@@ -194,7 +209,44 @@ class SimpleGridDeltaInfo:
 
         return distances, serial_to_pairs, pairs_to_serial
 
-    def compute_linkages(self, return_info=False):
+    def compute_distances(self) -> dict[frozenset, float]:
+        grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
+        connection_graph = self.env.make_directed_graph()
+
+        bidirectional_pairs = []
+        for (u, v) in connection_graph.edges():
+            if (v, u) in connection_graph.edges():
+                bidirectional_pairs.append(frozenset((u, v)))
+
+        distances = {}
+        for u, v in bidirectional_pairs:
+            vector_u = grid_feature_vectors[u]
+            vector_v = grid_feature_vectors[v]
+            distances[frozenset((u, v))] = np.sqrt(np.sum((vector_u - vector_v) ** 2)).item()
+
+        return distances
+
+    def compute_merge_sequence(self):
+        distances = self.compute_distances()
+        merge_sequence: list[frozenset] = sorted(distances, key=lambda k: distances[k])
+        return merge_sequence
+
+    def make_cluster(self, merge_sequence: list[frozenset], num_clusters_to_keep: int, ) -> set[
+        frozenset[tuple[int, int]]]:
+        graph = self.env.make_directed_graph()
+        # init clusters
+        clusters: set[frozenset[tuple[int, int]]] = set()
+        for node in graph.nodes:
+            clusters.add(frozenset([node]))  # Use frozenset for individual nodes
+        while len(clusters) > num_clusters_to_keep:
+            if not merge_sequence:
+                print("Warning: More groups kept than expected.")
+                break
+            pair_to_merge = merge_sequence.pop(0)
+            clusters = _merge(pair_to_merge, clusters)
+        return clusters
+
+    def _compute_linkages(self, return_info=False):
         distances, serial_to_pairs, pairs_to_serial = self.compute_distances()
         connection_graph = self.env.make_directed_graph()
 
@@ -269,19 +321,37 @@ class SimpleGridDeltaInfo:
         plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
         plt.close()
 
-    def plot_classified_grid(self, links: np.ndarray,
-                             serial_to_pairs: dict[int, tuple[tuple[int, int], tuple[int, int]]], filepath, max_num_groups: int or None=None):
+    def plot_classified_grid(self, merge_sequence: list[frozenset], filepath, max_num_groups: int or None=None):
+        # init clusters
+        clusters: set[frozenset[tuple[int, int]]] = set()
+        graph = self.env.make_directed_graph()
+        for node in graph.nodes:
+            clusters.add(frozenset([node]))  # Use frozenset for individual nodes
         if max_num_groups is None:
-            max_num_groups = links.shape[0] + 1
+            max_num_groups = len(clusters)
         min_num_groups = 2
         frames = []  # List to store frames for the GIF
+        previous_num_clusters = len(clusters)
         for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
-            clusters = fcluster(links, t=g, criterion='maxclust')
+            if len(clusters) <= 5:
+                pass
+            if len(clusters) > g:
+                if len(merge_sequence) == 0:
+                    print("Warning: More groups kept than expected.")
+                    break
+                while len(merge_sequence) >= 0:
+                    pair_to_merge = merge_sequence.pop(0)
+                    _length = len(clusters)
+                    clusters = _merge(pair_to_merge, clusters)
+                    __length = len(clusters)
+                    if __length != _length:
+                        break
+            clusters_in_dict = {i: group for i, group in enumerate(clusters)}
             position_to_cluster = {}
-            for i, cluster_label in enumerate(clusters):
-                pos_pair = serial_to_pairs[i]
-                for pos in pos_pair:
-                    position_to_cluster[pos] = cluster_label
+            for (i, j), info in self.dict_record.items():
+                for idx in clusters_in_dict.keys():
+                    if (i, j) in clusters_in_dict[idx]:
+                        position_to_cluster[(i, j)] = idx
 
             height, width = self.delta_info_grid.shape
             fig, ax = plt.subplots()
@@ -289,8 +359,14 @@ class SimpleGridDeltaInfo:
             color_grid[:, :, 3] = 1  # Set alpha channel to 1 for all grid cells
 
             # Generate a color for each cluster
-            unique_clusters = np.unique(clusters)
-            colors = cm.get_cmap('gist_rainbow', len(unique_clusters))
+            num_clusters = len(clusters)
+            colors = cm.get_cmap('gist_rainbow', num_clusters)
+
+            # if previous_num_clusters == num_clusters:
+            #     plt.close(fig)
+            #     break
+            #
+            # previous_num_clusters = num_clusters
 
             for pos, cluster_label in position_to_cluster.items():
                 color_grid[pos] = colors(cluster_label - 1)[:3] + (1,)  # Set RGB and keep alpha=1
@@ -312,7 +388,7 @@ class SimpleGridDeltaInfo:
             #         color_grid[i, j] = [1, 0, 0, 1]  # Red, fully opaque
 
             ax.imshow(color_grid, origin='upper', extent=[0, width, 0, height])
-            ax.set_title(f'Total Classes: {len(unique_clusters)} / Total Classes Allowed: {g}')
+            ax.set_title(f'Total Classes: {num_clusters}')
 
             # Change label to group index
             for pos, cluster_label in position_to_cluster.items():
@@ -329,7 +405,6 @@ class SimpleGridDeltaInfo:
 
         # Create GIF
         imageio.mimsave(filepath, frames, fps=1)
-
 
     def plot_graph(self, filepath):
         graph = self.env.make_directed_graph()
@@ -501,8 +576,8 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
         self.record.plot_graph(filepath)
 
     def plot_classified_grid(self, filepath, max_num_groups: int or None=None):
-        links, distances, serial_to_pairs, pairs_to_serial = self.record.compute_linkages(return_info=True)
-        self.record.plot_classified_grid(links, serial_to_pairs, filepath, max_num_groups=max_num_groups)
+        merge_sequence = self.record.compute_merge_sequence()
+        self.record.plot_classified_grid(merge_sequence, filepath, max_num_groups=max_num_groups)
 
 
 if __name__ == "__main__":
@@ -602,4 +677,4 @@ if __name__ == "__main__":
         sampler.plot_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_delta-info.png")
         sampler.plot_actions(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_action.png")
         sampler.plot_graph(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_graph.png")
-        sampler.plot_classified_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_classification.gif", max_num_groups=25)
+        sampler.plot_classified_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_classification.gif", max_num_groups=None)
