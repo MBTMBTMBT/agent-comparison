@@ -12,7 +12,7 @@ import matplotlib.cm as cm
 from io import BytesIO
 import networkx as nx
 
-from scipy.cluster.hierarchy import linkage, fcluster
+from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
 
 
 def non_zero_softmax(x: torch.Tensor, epsilon=1e-10) -> torch.Tensor:
@@ -199,11 +199,17 @@ class SimpleGridDeltaInfo:
         connection_graph = self.env.make_directed_graph()
 
         # Find bidirectionally connected pairs
-        bidirectional_pairs = {(u, v) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)}
-        bidirectional_pairs.update({(v, u) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)})
+        # bidirectional_pairs = {(u, v) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)}
+        # bidirectional_pairs.update({(v, u) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)})
+        bidirectional_pairs = []
+        for (u, v) in connection_graph.edges():
+            if (v, u) in connection_graph.edges():
+                bidirectional_pairs.append((u, v))
+                bidirectional_pairs.append((v, u))
 
         for i in serial_to_pairs.keys():
             if serial_to_pairs[i] not in bidirectional_pairs:
+                a = serial_to_pairs[i]
                 distances[i] = -1
 
         distances = np.array(distances, dtype=np.float32)
@@ -264,9 +270,10 @@ class SimpleGridDeltaInfo:
         plt.close()
 
     def plot_classified_grid(self, links: np.ndarray,
-                             serial_to_pairs: dict[int, tuple[tuple[int, int], tuple[int, int]]], filepath):
-        max_num_groups = links.shape[0] + 1
-        min_num_groups = 1
+                             serial_to_pairs: dict[int, tuple[tuple[int, int], tuple[int, int]]], filepath, max_num_groups: int or None=None):
+        if max_num_groups is None:
+            max_num_groups = links.shape[0] + 1
+        min_num_groups = 2
         frames = []  # List to store frames for the GIF
         for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
             clusters = fcluster(links, t=g, criterion='maxclust')
@@ -278,7 +285,8 @@ class SimpleGridDeltaInfo:
 
             height, width = self.delta_info_grid.shape
             fig, ax = plt.subplots()
-            color_grid = np.full((height, width, 4), (0, 0, 0, 1))  # Initialize with black background
+            color_grid = np.zeros((height, width, 4))  # RGBA format
+            color_grid[:, :, 3] = 1  # Set alpha channel to 1 for all grid cells
 
             # Generate a color for each cluster
             unique_clusters = np.unique(clusters)
@@ -289,16 +297,22 @@ class SimpleGridDeltaInfo:
 
             for (i, j), info in self.dict_record.items():
                 if (i, j) not in position_to_cluster:  # Keep original color if not in position_to_cluster
-                    if self.env.grid[(i, j)] == 'X':
-                        color_grid[i, j] = [1, 0, 0, 1]  # Red for traps
+                    if self.env.grid[(i, j)] == 'X':  # or rand traps...
+                        pass
+                        # color_grid[i, j] = [1, 0, 0, 1]  # Red for traps
                     elif info['terminated']:
                         color_grid[i, j] = [0, 1, 0, 1]  # Green for terminated states
                     else:
                         # Keep the original color based on delta_control_info
                         pass
 
+            # Debugging: Directly set a few grid cells to check color assignment
+            # for i in range(5):
+            #     for j in range(5):
+            #         color_grid[i, j] = [1, 0, 0, 1]  # Red, fully opaque
+
             ax.imshow(color_grid, origin='upper', extent=[0, width, 0, height])
-            ax.set_title(f'Total Classes: {len(unique_clusters)}')
+            ax.set_title(f'Total Classes: {len(unique_clusters)} / Total Classes Allowed: {g}')
 
             # Change label to group index
             for pos, cluster_label in position_to_cluster.items():
@@ -314,7 +328,7 @@ class SimpleGridDeltaInfo:
             plt.close(fig)
 
         # Create GIF
-        imageio.mimsave(filepath, frames, fps=2)
+        imageio.mimsave(filepath, frames, fps=1)
 
 
     def plot_graph(self, filepath):
@@ -485,9 +499,9 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_graph(self, filepath):
         self.record.plot_graph(filepath)
 
-    def plot_classified_grid(self, filepath):
+    def plot_classified_grid(self, filepath, max_num_groups: int or None=None):
         links, distances, serial_to_pairs, pairs_to_serial = self.record.compute_linkages(return_info=True)
-        self.record.plot_classified_grid(links, serial_to_pairs, filepath)
+        self.record.plot_classified_grid(links, serial_to_pairs, filepath, max_num_groups=max_num_groups)
 
 
 if __name__ == "__main__":
@@ -587,4 +601,4 @@ if __name__ == "__main__":
         sampler.plot_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_delta-info.png")
         sampler.plot_actions(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_action.png")
         sampler.plot_graph(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_graph.png")
-        sampler.plot_classified_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_classification.gif")
+        sampler.plot_classified_grid(f"results/{config['env_type']}_{config['env_file'].split('/')[-1]}_classification.gif", max_num_groups=25)
