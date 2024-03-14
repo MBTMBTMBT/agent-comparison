@@ -389,7 +389,7 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-empty-7.txt', agent_position=(1, 1), goal_position=(5, 5), random_traps=0)
+    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', agent_position=(1, 1), goal_position=(1, 1), random_traps=0)
     env.make_directed_graph(show=True)
     exit()
     obs = env.reset()
