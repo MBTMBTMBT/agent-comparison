@@ -141,7 +141,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                     reachable_positions.append(potential_neighbour)
         return reachable_positions
 
-    def make_directed_graph(self, filepath: None or str = None):
+    def make_directed_graph(self, filepath: None or str = None, show=False):
         graph = nx.DiGraph()
         node_colors = {}  # Dictionary to store colors keyed by node
 
@@ -170,6 +170,14 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             # plt.show()
             plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
             plt.close()
+
+        if show:
+            # Apply the colors when drawing
+            colors = [node_colors.get(node, 'blue') for node in graph.nodes()]
+            pos = nx.kamada_kawai_layout(graph)  # Positions for all nodes
+            node_sizes = [100 for n in graph.nodes()]
+            nx.draw(graph, pos, with_labels=True, arrows=True, node_color=colors, node_size=node_sizes, font_size=8, )
+            plt.show()
 
         return graph
 
@@ -381,8 +389,8 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-traps-13.txt', agent_position=(1, 1), goal_position=(3, 3), random_traps=0)
-    env.make_directed_graph()
+    env = SimpleGridWorld('envs/simple_grid/gridworld-empty-7.txt', agent_position=(1, 1), goal_position=(5, 5), random_traps=0)
+    env.make_directed_graph(show=True)
     exit()
     obs = env.reset()
     done = False
