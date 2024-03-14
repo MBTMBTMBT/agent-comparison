@@ -333,12 +333,19 @@ class SimpleGridDeltaInfo:
         frames = []  # List to store frames for the GIF
         previous_num_clusters = len(clusters)
         for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
+            if len(clusters) <= 5:
+                pass
             if len(clusters) > g:
                 if len(merge_sequence) == 0:
                     print("Warning: More groups kept than expected.")
                     break
-                pair_to_merge = merge_sequence.pop(0)
-                clusters = _merge(pair_to_merge, clusters)
+                while len(merge_sequence) >= 0:
+                    pair_to_merge = merge_sequence.pop(0)
+                    _length = len(clusters)
+                    clusters = _merge(pair_to_merge, clusters)
+                    __length = len(clusters)
+                    if __length != _length:
+                        break
             clusters_in_dict = {i: group for i, group in enumerate(clusters)}
             position_to_cluster = {}
             for (i, j), info in self.dict_record.items():
@@ -398,7 +405,6 @@ class SimpleGridDeltaInfo:
 
         # Create GIF
         imageio.mimsave(filepath, frames, fps=1)
-
 
     def plot_graph(self, filepath):
         graph = self.env.make_directed_graph()
