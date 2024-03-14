@@ -482,7 +482,7 @@ class SimpleGridDeltaInfo:
         }
 
         # Scale factors for arrow size, adjust as needed
-        scale_length = 0.5  # Adjust for overall arrow length
+        scale_length = 1  # Adjust for overall arrow length
         scale_width = 0.05  # Adjust for overall arrow width
 
         # Draw arrows for agent and prior actions
@@ -503,8 +503,8 @@ class SimpleGridDeltaInfo:
 
                 # Agent action arrow
                 if agent_action_prob > 0:  # Draw only if there is a non-zero probability
-                    ax.arrow(start_x, start_y, dx * agent_action_prob * scale_length,
-                             dy * agent_action_prob * scale_length, head_width=scale_width, head_length=scale_width,
+                    ax.arrow(start_x, start_y, dx * agent_action_prob * scale_length * info['delta_control_info'],
+                             dy * agent_action_prob * scale_length * info['delta_control_info'], head_width=scale_width, head_length=scale_width,
                              fc='gold', ec='orange')
 
                 # Prior action arrow
@@ -513,8 +513,8 @@ class SimpleGridDeltaInfo:
                     # ax.arrow(start_x + dx * 0.1, start_y + dy * 0.1, dx * prior_action_prob * scale_length,
                     #          dy * prior_action_prob * scale_length, head_width=scale_width, head_length=scale_width,
                     #          fc='lightblue', ec='lightblue')
-                    ax.arrow(start_x, start_y, dx * prior_action_prob * scale_length,
-                             dy * prior_action_prob * scale_length, head_width=scale_width, head_length=scale_width,
+                    ax.arrow(start_x, start_y, dx * prior_action_prob * scale_length * info['delta_control_info'],
+                             dy * prior_action_prob * scale_length * info['delta_control_info'], head_width=scale_width, head_length=scale_width,
                              fc='lightblue', ec='lightblue')
 
         # Add legend
