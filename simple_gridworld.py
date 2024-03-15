@@ -144,16 +144,18 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             for action in ACTION_NAMES.keys():
                 delta = deltas[action]
                 new_position = (self.agent_position[0] + delta[0], self.agent_position[1] + delta[1])
+                rewards[len(ACTION_NAMES)] = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
                 if 0 <= new_position[0] < self.grid.shape[0] and 0 <= new_position[1] < self.grid.shape[1]:
                     if self.grid[new_position] not in ['W']:
                         # new position reachable
                         connections[action] = 1.0
                         rewards[action] = 0.0
+                        rewards[action] += 5 if new_position == self.goal_position else -1 if (self.grid[new_position] == 'X' or new_position in self.pos_random_traps) else -0.01
                     elif self.grid[new_position] == 'W':
                         # hits wall
                         connections[action] = 0.0
                         rewards[action] = -0.1
-            rewards[len(ACTION_NAMES)] = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
+                        rewards[action] += rewards[len(ACTION_NAMES)]
             connections = torch.tensor([connections[i] for i in range(len(connections))])
             rewards = torch.tensor([rewards[i] for i in range(len(rewards))])
             return observation, terminated, self.agent_position, connections, rewards
@@ -405,6 +407,8 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
     def __init__(self, simple_gridworld: SimpleGridWorld, clusters: set[frozenset[tuple[int, int]]]):
         super(SimpleGridWorldWithStateAbstraction, self).__init__()
         self.simple_gridworld = simple_gridworld
+
+        # get clusters
         self.clusters = clusters
         self.clusters_in_dict = {i: group for i, group in enumerate(self.clusters)}
         self.position_to_cluster = {}
@@ -415,13 +419,54 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
                         self.position_to_cluster[(i, j)] = idx
 
         # cancel randomization
-        self.simple_gridworld._agent_position = self.simple_gridworld.agent_position
+        # start position can still be random
+        # self.simple_gridworld._agent_position = self.simple_gridworld.agent_position
         self.simple_gridworld._goal_position = self.simple_gridworld.goal_position
         self.simple_gridworld.random_traps = 0
         self.simple_gridworld.random = False
 
     def step(self, action):
-        return self.simple_gridworld.step(action)
+        self.simple_gridworld.step_count += 1
+        if self.simple_gridworld.step_count >= self.simple_gridworld.max_steps:
+            terminated = True
+            truncated = True
+            reward = 0
+        else:
+            deltas = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
+            delta = deltas[action]
+            new_position = (self.simple_gridworld.agent_position[0] + delta[0], self.simple_gridworld.agent_position[1] + delta[1])
+
+            previous_position = self.simple_gridworld.agent_position
+
+            hits_wall = False
+            if 0 <= new_position[0] < self.simple_gridworld.shape[0] and 0 <= new_position[1] < self.simple_gridworld.grid.shape[1]:
+                if self.simple_gridworld.grid[new_position] not in ['W']:
+                    self.simple_gridworld.agent_position = new_position
+                elif self.simple_gridworld.grid[new_position] == 'W':
+                    hits_wall = True
+
+            terminated = self.simple_gridworld.agent_position == self.simple_gridworld.goal_position
+            truncated = False
+            reward = 5 if self.simple_gridworld.agent_position == self.simple_gridworld.goal_position else -1 if (
+                        self.simple_gridworld.grid[self.simple_gridworld.agent_position] == 'X' or self.simple_gridworld.agent_position in self.simple_gridworld.pos_random_traps) else -0.01
+            if hits_wall:
+                reward -= 0.1
+
+            new_position = self.simple_gridworld.agent_position
+            momentum = np.array(new_position, dtype=np.float32) - np.array(previous_position, dtype=np.float32)
+            new_position_group = self.position_to_cluster[new_position]
+
+            for _ in range(16384):
+                rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
+                rand_new_position = random.choice(rand_candidates)
+                # todo: check momentum for the new position (general correct direction)
+                # todo: check distance to new_position and old_position, make sure that first >= second
+
+        self.simple_gridworld._render_to_surface()
+        observation = self.simple_gridworld.get_observation()
+        observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
+        observation /= 255.0 if observation.max() > 1.0 else 1.0
+        return observation, reward, terminated, truncated, {"position": self.simple_gridworld.agent_position}
 
     def reset(self, seed=None, options=None):
         return self.simple_gridworld.reset(seed, options)
