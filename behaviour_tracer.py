@@ -179,38 +179,6 @@ class SimpleGridDeltaInfo:
         self.available_positions.append(position)
         self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], connections, rewards))
 
-    def _compute_distances(self) -> tuple[
-        list[float or np.inf], dict[int, tuple[tuple[int, int], tuple[int, int]]], dict[
-            tuple[tuple[int, int], tuple[int, int]], int]]:
-        grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
-
-        # Extract vectors from available positions
-        vectors = np.array([grid_feature_vectors[x, y] for x, y in self.available_positions])
-
-        # Compute pairwise distances using broadcasting
-        diff = vectors[:, np.newaxis, :] - vectors[np.newaxis, :, :]
-        distances = np.sqrt(np.sum(diff ** 2, axis=-1))
-
-        # Flatten the upper triangle of the distance matrix to get the condensed distance vector
-        i_upper = np.triu_indices(len(self.available_positions), k=1)
-        distances = distances[i_upper].tolist()
-
-        # Create mapping dictionaries
-        serial_to_pairs = {}
-        pairs_to_serial = {}
-        for i, (pos1_idx, pos2_idx) in enumerate(zip(*i_upper)):
-            pos1: tuple[int, int] = self.available_positions[pos1_idx]
-            pos2: tuple[int, int] = self.available_positions[pos2_idx]
-
-            # Map serial number to position pairs
-            serial_to_pairs[i] = (pos1, pos2)
-
-            # Map position pairs (as unordered) to serial number
-            pairs_to_serial[(pos1, pos2)] = i
-            pairs_to_serial[(pos2, pos1)] = i
-
-        return distances, serial_to_pairs, pairs_to_serial
-
     def compute_distances(self) -> dict[frozenset, float]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
         connection_graph = self.env.make_directed_graph()
@@ -252,41 +220,6 @@ class SimpleGridDeltaInfo:
             pair_to_merge = merge_sequence.pop(0)
             clusters = _merge(pair_to_merge, clusters)
         return clusters
-
-    def _compute_linkages(self, return_info=False):
-        distances, serial_to_pairs, pairs_to_serial = self.compute_distances()
-        connection_graph = self.env.make_directed_graph()
-
-        # Find bidirectionally connected pairs
-        # bidirectional_pairs = {(u, v) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)}
-        # bidirectional_pairs.update({(v, u) for u, v in connection_graph.edges() if connection_graph.has_edge(v, u)})
-        bidirectional_pairs = []
-        for (u, v) in connection_graph.edges():
-            if (v, u) in connection_graph.edges():
-                bidirectional_pairs.append((u, v))
-                bidirectional_pairs.append((v, u))
-
-        for i in serial_to_pairs.keys():
-            if serial_to_pairs[i] not in bidirectional_pairs:
-                a = serial_to_pairs[i]
-                distances[i] = -1
-
-        distances = np.array(distances, dtype=np.float32)
-
-        max_distance = np.max(distances)
-        large_distance_value = max_distance * 10  # Example: 10 times the max distance
-        distances = np.where(distances == -1, large_distance_value, distances)
-
-        # Perform hierarchical clustering
-        links = linkage(distances, method='single')
-
-        # Decide the number of clusters or a cutoff to form clusters
-        # clusters = fcluster(links, t=1.5, criterion='distance')
-
-        if return_info:
-            return links, distances, serial_to_pairs, pairs_to_serial
-
-        return links
 
     def plot_grid(self, filepath):
         height, width = self.delta_info_grid.shape
@@ -595,6 +528,17 @@ if __name__ == "__main__":
     from stable_baselines3.common.env_util import DummyVecEnv
 
     test_env_configurations = [
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (1, 11),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 128,
+        },
         {
             "env_type": "SimpleGridworld",
             "env_file": "envs/simple_grid/gridworld-empty-7.txt",
