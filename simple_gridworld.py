@@ -19,6 +19,22 @@ ACTION_NAMES = {
 }
 
 
+def rotate_grid(grid):
+    """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
+    rotations = random.choice([0, 1, 2, 3])
+    return np.rot90(grid, k=rotations)
+
+
+def flip_grid(grid):
+    """Flip the grid randomly: horizontally, vertically, or not at all."""
+    flip_type = random.choice(["horizontal", "vertical", "none"])
+    if flip_type == "horizontal":
+        return np.fliplr(grid)
+    elif flip_type == "vertical":
+        return np.flipud(grid)
+    return grid
+
+
 class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     """
 
@@ -200,29 +216,11 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         return graph
 
-    def reset_iterator(self):
-        self.iter_index = 0
-        self.iter_coord = (0, 0)
-
     def load_grid(self, text_file):
         with open(text_file, 'r') as file:
             lines = file.read().splitlines()
         self.grid = np.array([list(line) for line in lines])
         return self.grid
-
-    def rotate_grid(self, grid):
-        """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
-        rotations = random.choice([0, 1, 2, 3])
-        return np.rot90(grid, k=rotations)
-
-    def flip_grid(self, grid):
-        """Flip the grid randomly: horizontally, vertically, or not at all."""
-        flip_type = random.choice(["horizontal", "vertical", "none"])
-        if flip_type == "horizontal":
-            return np.fliplr(grid)
-        elif flip_type == "vertical":
-            return np.flipud(grid)
-        return grid
 
     def reset_positions(self):
         self.occupied_positions = set()
@@ -286,13 +284,9 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.step_count = 0
         if self.random:
             # Randomly rotate the grid
-            self.grid = self.rotate_grid(self.grid)
+            self.grid = rotate_grid(self.grid)
             # Randomly flip the grid
-            self.grid = self.flip_grid(self.grid)
-        # if not self._agent_position:
-        #     self.agent_position = self.assign_position({self.goal_position})
-        # if not self._goal_position:
-        #     self.goal_position = self.assign_position({self.agent_position})
+            self.grid = flip_grid(self.grid)
         self.reset_positions()
 
         self._render_to_surface()
@@ -405,6 +399,25 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
     # Add a batch dimension
     processed_tensor = processed_tensor.unsqueeze(0)
     return processed_tensor
+
+
+class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
+    def __init__(self, simple_gridworld: SimpleGridWorld, clusters: set[frozenset[tuple[int, int]]]):
+        super(SimpleGridWorldWithStateAbstraction, self).__init__()
+        self.simple_gridworld = simple_gridworld
+        self.clusters = clusters
+
+        # cancel randomization
+        self.simple_gridworld._agent_position = self.simple_gridworld.agent_position
+        self.simple_gridworld._goal_position = self.simple_gridworld.goal_position
+        self.simple_gridworld.random_traps = 0
+        self.simple_gridworld.random = False
+
+    def step(self, action):
+        return self.simple_gridworld.step(action)
+
+    def reset(self, seed=None, options=None):
+        return self.simple_gridworld.reset(seed, options)
 
 
 if __name__ == "__main__":
