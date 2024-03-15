@@ -121,9 +121,28 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             observation = self.get_observation()
             observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
             observation /= 255.0 if observation.max() > 1.0 else 1.0
-            return observation, terminated, self.agent_position
 
-        return None, None, self.agent_position
+            connections = {}
+            rewards = {}
+            deltas = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
+            for action in ACTION_NAMES.keys():
+                delta = deltas[action]
+                new_position = (self.agent_position[0] + delta[0], self.agent_position[1] + delta[1])
+                if 0 <= new_position[0] < self.grid.shape[0] and 0 <= new_position[1] < self.grid.shape[1]:
+                    if self.grid[new_position] not in ['W']:
+                        # new position reachable
+                        connections[action] = 1.0
+                        rewards[action] = 0.0
+                    elif self.grid[new_position] == 'W':
+                        # hits wall
+                        connections[action] = 0.0
+                        rewards[action] = -0.1
+            rewards[len(ACTION_NAMES)] = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
+            connections = torch.tensor([connections[i] for i in range(len(connections))])
+            rewards = torch.tensor([rewards[i] for i in range(len(rewards))])
+            return observation, terminated, self.agent_position, connections, rewards
+
+        return None, None, self.agent_position, None, None
 
     def iter_reset(self):
         self.iter_index = 0
