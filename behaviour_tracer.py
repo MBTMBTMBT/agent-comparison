@@ -190,11 +190,6 @@ class SimpleGridDeltaInfo:
 
         distances = {}
         for u, v in bidirectional_pairs:
-            # if u == (4, 2) or v == (4, 2):
-            #     vector_u = grid_feature_vectors[u]
-            #     vector_v = grid_feature_vectors[v]
-            #     val = np.sqrt(np.sum((vector_u - vector_v) ** 2)).item()
-            #     pass
             vector_u = grid_feature_vectors[u]
             vector_v = grid_feature_vectors[v]
             distances[frozenset((u, v))] = np.sqrt(np.sum((vector_u - vector_v) ** 2)).item()
