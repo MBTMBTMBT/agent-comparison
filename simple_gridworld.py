@@ -406,6 +406,13 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
         super(SimpleGridWorldWithStateAbstraction, self).__init__()
         self.simple_gridworld = simple_gridworld
         self.clusters = clusters
+        self.clusters_in_dict = {i: group for i, group in enumerate(self.clusters)}
+        self.position_to_cluster = {}
+        for i in range(self.simple_gridworld.grid.shape[0]):
+            for j in range(self.simple_gridworld.grid.shape[1]):
+                for idx in self.clusters_in_dict.keys():
+                    if (i, j) in self.clusters_in_dict[idx]:
+                        self.position_to_cluster[(i, j)] = idx
 
         # cancel randomization
         self.simple_gridworld._agent_position = self.simple_gridworld.agent_position
