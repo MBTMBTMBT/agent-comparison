@@ -14,7 +14,6 @@ if __name__ == "__main__":
     # dir names
     base_name = "simple-gridworld-ppo-abs"
     save_dir = "saved-models"
-    log_path = "logs"
 
     # Create the save directory if it doesn't exist
     os.makedirs(save_dir, exist_ok=True)
@@ -22,8 +21,7 @@ if __name__ == "__main__":
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
         test_env_configurations,
-        log_path,
-        base_name,
+        base_name+"-log",
         n_eval_episodes=10,
         eval_freq=5000,
         deterministic=False,
@@ -40,5 +38,5 @@ if __name__ == "__main__":
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=1000000, callback=[test_and_log_callback, update_env_callback])
+    model.learn(total_timesteps=5000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
