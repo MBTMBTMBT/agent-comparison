@@ -1,3 +1,4 @@
+import copy
 import os
 import re
 import numpy as np
@@ -5,6 +6,8 @@ import matplotlib.pyplot as plt
 import imageio
 import stable_baselines3.common.on_policy_algorithm
 import torch
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.evaluation import evaluate_policy
 
 from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
 from simple_gridworld import SimpleGridWorld, SimpleGridWorldWithStateAbstraction
@@ -161,8 +164,8 @@ def make_env(configure: dict) -> SimpleGridWorld:
 
 def make_abs_env(
         configure: dict,
-        prior_agent: stable_baselines3.PPO,
-        agent: stable_baselines3.PPO,
+        prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
+        agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
         num_clusters: int,
 ) -> SimpleGridWorldWithStateAbstraction:
     env = make_env(configure)
@@ -203,3 +206,84 @@ def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models")
     if latest_model_iteration is None:
         latest_model_iteration = -1
     return os.path.join(save_dir, latest_model), latest_model_iteration
+
+
+class TestAndLogCallback(BaseCallback):
+    def __init__(
+            self,
+            eval_env_configurations: list[dict],
+            log_path: str,
+            session_name: str,
+            n_eval_episodes=10,
+            eval_freq=10000,
+            deterministic=False,
+            render=False,
+            verbose=1,
+    ):
+        super(TestAndLogCallback, self).__init__(verbose)
+        self.eval_env_configs = eval_env_configurations
+        self.env_names = [each['env_file'].split('/')[-1] for each in eval_env_configurations]
+        self.envs = [make_env(each) for each in eval_env_configurations]
+        self.eval_freq = eval_freq
+        self.deterministic = deterministic
+        self.render = render
+        self.log_path = log_path
+        self.session_name = session_name
+        self.n_eval_episodes = n_eval_episodes
+        # For TensorBoard logging
+        self.tb_writer = None
+        self.eval_timesteps = []
+
+    def _init_callback(self) -> None:
+        if self.tb_writer is None:
+            from torch.utils.tensorboard import SummaryWriter
+            self.tb_writer = SummaryWriter(log_dir=self.log_path)
+
+    def _on_step(self) -> bool:
+        super(TestAndLogCallback, self)._on_step()
+        if self.n_calls % self.eval_freq == 0:
+            for env_name, env in zip(self.env_names, self.envs):
+                # Manually evaluate the policy on each environment
+                mean_reward, std_reward = evaluate_policy(self.model, env, n_eval_episodes=self.n_eval_episodes,
+                                                          deterministic=self.deterministic, render=self.render)
+
+                # Log results for each environment under a unique name
+                self.tb_writer.add_scalar(f'{self.session_name}-{env_name}/mean_reward', mean_reward, self.num_timesteps)
+                self.tb_writer.add_scalar(f'{self.session_name}-{env_name}/std_reward', std_reward, self.num_timesteps)
+
+                if self.verbose > 0:
+                    print(f"Step: {self.num_timesteps}. {self.session_name}-{env_name} Mean reward: {mean_reward} +/- {std_reward}.")
+        return True
+
+    def _on_training_end(self) -> None:
+        if self.tb_writer:
+            self.tb_writer.close()
+
+
+class UpdateEnvCallback(BaseCallback):
+    def __init__(
+            self,
+            env_configurations: list[dict],
+            num_clusters: int,
+            update_env_freq=10000,
+            update_agent_freq=200000,
+            verbose=1,
+    ):
+        super(UpdateEnvCallback, self).__init__(verbose)
+        self.env_configs = env_configurations
+        self.num_clusters = num_clusters
+        self.update_env_freq = update_env_freq
+        self.update_agent_freq = update_agent_freq
+        self.prior_agent = copy.deepcopy(self.model)
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.update_agent_freq == 0:
+            self.prior_agent = copy.deepcopy(self.model)
+            print("Updated prior agent.")
+        if self.n_calls % self.update_env_freq == 0:
+            for i in range(len(self.model.env.envs)):
+                new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.num_clusters)
+                self.model.env.envs[i] = new_env
+                if self.verbose:
+                    print(f"Replaced environment {i} at step {self.num_timesteps}.")
+        return True
