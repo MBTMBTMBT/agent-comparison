@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import imageio
 import stable_baselines3.common.on_policy_algorithm
 import torch
+from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 
@@ -213,7 +214,7 @@ class TestAndLogCallback(BaseCallback):
             self,
             eval_env_configurations: list[dict],
             log_path: str,
-            session_name: str,
+            # session_name: str,
             n_eval_episodes=10,
             eval_freq=10000,
             deterministic=False,
@@ -228,7 +229,7 @@ class TestAndLogCallback(BaseCallback):
         self.deterministic = deterministic
         self.render = render
         self.log_path = log_path
-        self.session_name = session_name
+        # self.session_name = session_name
         self.n_eval_episodes = n_eval_episodes
         # For TensorBoard logging
         self.tb_writer = None
@@ -248,8 +249,8 @@ class TestAndLogCallback(BaseCallback):
                                                           deterministic=self.deterministic, render=self.render)
 
                 # Log results for each environment under a unique name
-                self.tb_writer.add_scalar(f'{self.session_name}-{env_name}/mean_reward', mean_reward, self.num_timesteps)
-                self.tb_writer.add_scalar(f'{self.session_name}-{env_name}/std_reward', std_reward, self.num_timesteps)
+                self.tb_writer.add_scalar(f'{env_name}/mean_reward', mean_reward, self.num_timesteps)
+                self.tb_writer.add_scalar(f'{env_name}/std_reward', std_reward, self.num_timesteps)
 
                 if self.verbose > 0:
                     print(f"Step: {self.num_timesteps}. {self.session_name}-{env_name} Mean reward: {mean_reward} +/- {std_reward}.")
@@ -274,11 +275,18 @@ class UpdateEnvCallback(BaseCallback):
         self.num_clusters = num_clusters
         self.update_env_freq = update_env_freq
         self.update_agent_freq = update_agent_freq
-        self.prior_agent = copy.deepcopy(self.model)
+        self.prior_agent = None
 
     def _on_step(self) -> bool:
+        if self.prior_agent is None:
+            self.prior_agent = PPO("CnnPolicy", self.model.env, policy_kwargs={"normalize_images": False}, verbose=1)
+            # Copy the weights from the current model to the new_prior_agent
+            self.prior_agent.set_parameters(self.model.get_parameters())
+            print("Updated prior agent.")
         if self.n_calls % self.update_agent_freq == 0:
-            self.prior_agent = copy.deepcopy(self.model)
+            self.prior_agent = PPO("CnnPolicy", self.model.env, policy_kwargs={"normalize_images": False}, verbose=1)
+            # Copy the weights from the current model to the new_prior_agent
+            self.prior_agent.set_parameters(self.model.get_parameters())
             print("Updated prior agent.")
         if self.n_calls % self.update_env_freq == 0:
             for i in range(len(self.model.env.envs)):
