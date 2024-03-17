@@ -612,6 +612,28 @@ if __name__ == "__main__":
             "make_random": True,
             "max_steps": 512,
         },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-7.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (1, 1),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 512,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/gridworld-maze-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (1, 1),
+            "num_random_traps": 0,
+            "make_random": True,
+            "max_steps": 512,
+        },
     ]
 
     env_fns = [partial(make_env, config) for config in test_env_configurations]
