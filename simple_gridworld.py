@@ -1,16 +1,14 @@
 import collections
 import random
-import time
 
 import gymnasium
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
 import pygame
 import torch
 from gymnasium import spaces
-import numpy as np
 from torchvision.transforms import transforms
-import networkx as nx
-import matplotlib.pyplot as plt
-
 
 ACTION_NAMES = {
     0: 'UP',
@@ -78,7 +76,8 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     """
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
-    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, random_traps=0, make_random=False, max_steps=128):
+    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None,
+                 random_traps=0, make_random=False, max_steps=128):
         super(SimpleGridWorld, self).__init__()
         self.random = make_random
         self.max_steps = max_steps
@@ -145,13 +144,15 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             for action in ACTION_NAMES.keys():
                 delta = deltas[action]
                 new_position = (self.agent_position[0] + delta[0], self.agent_position[1] + delta[1])
-                rewards[len(ACTION_NAMES)] = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
+                rewards[len(ACTION_NAMES)] = 5 if self.agent_position == self.goal_position else -1 if (self.grid[
+                                                                                                            self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
                 if 0 <= new_position[0] < self.grid.shape[0] and 0 <= new_position[1] < self.grid.shape[1]:
                     if self.grid[new_position] not in ['W']:
                         # new position reachable
                         connections[action] = 1.0
                         rewards[action] = 0.0
-                        rewards[action] += 5 if new_position == self.goal_position else -1 if (self.grid[new_position] == 'X' or new_position in self.pos_random_traps) else -0.01
+                        rewards[action] += 5 if new_position == self.goal_position else -1 if (
+                                    self.grid[new_position] == 'X' or new_position in self.pos_random_traps) else -0.01
                     elif self.grid[new_position] == 'W':
                         # hits wall
                         connections[action] = 0.0
@@ -169,7 +170,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
     def directed_reachable_positions(self, position: tuple[int, int]) -> list[tuple[int, int]]:
         x, y = position
-        potential_neighbours = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]  # Neighbors are up, down, left, right
+        potential_neighbours = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]  # Neighbors are up, down, left, right
         reachable_positions = []
         if self.grid[x, y] in ['W'] or position == self.goal_position:
             return reachable_positions
@@ -268,7 +269,8 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
+        reward = 5 if self.agent_position == self.goal_position else -1 if (
+                    self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
         if hits_wall:
             reward -= 0.1
 
@@ -435,12 +437,14 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
         else:
             deltas = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
             delta = deltas[action]
-            new_position = (self.simple_gridworld.agent_position[0] + delta[0], self.simple_gridworld.agent_position[1] + delta[1])
+            new_position = (
+            self.simple_gridworld.agent_position[0] + delta[0], self.simple_gridworld.agent_position[1] + delta[1])
 
             previous_position = self.simple_gridworld.agent_position
 
             hits_wall = False
-            if 0 <= new_position[0] < self.simple_gridworld.shape[0] and 0 <= new_position[1] < self.simple_gridworld.grid.shape[1]:
+            if 0 <= new_position[0] < self.simple_gridworld.shape[0] and 0 <= new_position[1] < \
+                    self.simple_gridworld.grid.shape[1]:
                 if self.simple_gridworld.grid[new_position] not in ['W']:
                     self.simple_gridworld.agent_position = new_position
                 elif self.simple_gridworld.grid[new_position] == 'W':
@@ -449,7 +453,8 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
             terminated = self.simple_gridworld.agent_position == self.simple_gridworld.goal_position
             truncated = False
             reward = 5 if self.simple_gridworld.agent_position == self.simple_gridworld.goal_position else -1 if (
-                        self.simple_gridworld.grid[self.simple_gridworld.agent_position] == 'X' or self.simple_gridworld.agent_position in self.simple_gridworld.pos_random_traps) else 0.0
+                    self.simple_gridworld.grid[
+                        self.simple_gridworld.agent_position] == 'X' or self.simple_gridworld.agent_position in self.simple_gridworld.pos_random_traps) else 0.0
             if hits_wall:
                 reward -= 0.1
                 reward -= 0.01
@@ -510,16 +515,17 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', agent_position=(1, 1), goal_position=(11, 11), random_traps=0)
+    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', make_random=True, random_traps=5)
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv
     from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
+
     dummy_env = DummyVecEnv([lambda: env])
     prior_agent = PPO.load("saved-models/simple-gridworld-ppo-prior-149.zip", env=env, verbose=1)
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent)
     sampler.sample()
-    cluster = sampler.make_cluster(60)
+    cluster = sampler.make_cluster(45)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     # env.make_directed_graph(show=True)
     # exit()
