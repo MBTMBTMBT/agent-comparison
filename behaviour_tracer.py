@@ -2,9 +2,10 @@ import os
 
 import imageio
 import numpy as np
+import stable_baselines3.common.on_policy_algorithm
+
 from simple_gridworld import SimpleGridWorld
 import torch
-from stable_baselines3 import PPO
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
@@ -465,8 +466,8 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def __init__(
             self,
             env: SimpleGridWorld,
-            agent: PPO,
-            prior_agent: PPO,
+            agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
+            prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
     ):
         self.env = env
         self.agent = agent
@@ -519,9 +520,10 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
 
 
 if __name__ == "__main__":
-    from train_baseline import make_env
+    from utils import make_env
     from functools import partial
     from stable_baselines3.common.env_util import DummyVecEnv
+    from stable_baselines3 import PPO
 
     test_env_configurations = [
         {
