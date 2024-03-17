@@ -449,47 +449,51 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
             terminated = self.simple_gridworld.agent_position == self.simple_gridworld.goal_position
             truncated = False
             reward = 5 if self.simple_gridworld.agent_position == self.simple_gridworld.goal_position else -1 if (
-                        self.simple_gridworld.grid[self.simple_gridworld.agent_position] == 'X' or self.simple_gridworld.agent_position in self.simple_gridworld.pos_random_traps) else -0.01
+                        self.simple_gridworld.grid[self.simple_gridworld.agent_position] == 'X' or self.simple_gridworld.agent_position in self.simple_gridworld.pos_random_traps) else 0.0
             if hits_wall:
                 reward -= 0.1
+                reward -= 0.01
+            else:
+                new_position = self.simple_gridworld.agent_position
+                momentum = np.array(new_position, dtype=np.float32) - np.array(previous_position, dtype=np.float32)
+                new_position_group = self.position_to_cluster[new_position]
 
-            new_position = self.simple_gridworld.agent_position
-            momentum = np.array(new_position, dtype=np.float32) - np.array(previous_position, dtype=np.float32)
-            new_position_group = self.position_to_cluster[new_position]
-
-            # get random new position
-            rand_new_position = new_position
-            radian_th = 0.01
-            radian = 3.14159265 * 0.5 * radian_th  # expected radian
-            rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
-            random.shuffle(rand_candidates)
-            for pos in rand_candidates:
-                rand_momentum = np.array(pos) - np.array(new_position)
-                # compute radian:
-                # Calculate the dot product
-                dot_product = np.dot(momentum, rand_momentum)
-                # Calculate the magnitudes
-                magnitude_a = np.linalg.norm(momentum)
-                magnitude_b = np.linalg.norm(rand_momentum)
-                if magnitude_b == 0:
-                    rand_new_position = pos
-                    break
-                # compute the cosine of the angle
-                cos_angle = dot_product / (magnitude_a * magnitude_b)
-                # Calculate the angle in radians
-                angle_radians = np.arccos(cos_angle)
-                if angle_radians <= radian:
-                    distance_to_old = np.linalg.norm(np.array(pos) - np.array(previous_position))
-                    distance_to_new = np.linalg.norm(np.array(pos) - np.array(new_position))
-                    if distance_to_old >= distance_to_new:
-                        rand_new_position = pos
-                        break
-            self.simple_gridworld.agent_position = rand_new_position
+                # get random new position
+                rand_new_position = new_position
+                radian_th = 0.01
+                radian = 3.14159265 * 0.5 * radian_th  # expected radian
+                rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
+                random.shuffle(rand_candidates)
+                for pos in rand_candidates:
+                    rand_momentum = np.array(pos) - np.array(previous_position)
+                    # compute radian:
+                    # Calculate the dot product
+                    dot_product = np.dot(momentum, rand_momentum)
+                    # Calculate the magnitudes
+                    magnitude_a = np.linalg.norm(momentum)
+                    magnitude_b = np.linalg.norm(rand_momentum)
+                    # if moving only one block or not moving at all:
+                    if magnitude_b == 0:
+                        continue
+                    # compute the cosine of the angle
+                    cos_angle = dot_product / (magnitude_a * magnitude_b)
+                    # Calculate the angle in radians
+                    angle_radians = np.arccos(cos_angle)
+                    if angle_radians <= radian:
+                        distance_to_old = np.linalg.norm(np.array(pos) - np.array(previous_position))
+                        distance_to_new = np.linalg.norm(np.array(pos) - np.array(new_position))
+                        if distance_to_old >= distance_to_new:
+                            rand_new_position = pos
+                            # print(momentum, rand_momentum, general_momentum)
+                            reward -= 0.01 * np.sum(np.abs(rand_momentum))
+                            break
+                self.simple_gridworld.agent_position = rand_new_position
 
         self.simple_gridworld._render_to_surface()
         observation = self.simple_gridworld.get_observation()
         observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
         observation /= 255.0 if observation.max() > 1.0 else 1.0
+        print(reward)
         return observation, reward, terminated, truncated, {"position": self.simple_gridworld.agent_position}
 
     def reset(self, seed=None, options=None):
