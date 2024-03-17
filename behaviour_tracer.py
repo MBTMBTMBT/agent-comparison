@@ -1,7 +1,6 @@
 import os
 
 import imageio
-from PIL import Image
 import numpy as np
 from simple_gridworld import SimpleGridWorld
 import torch
@@ -9,10 +8,8 @@ from stable_baselines3 import PPO
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-from io import BytesIO
 import networkx as nx
 
-from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
 
 
 def non_zero_softmax(x: torch.Tensor, epsilon=1e-10) -> torch.Tensor:
@@ -145,8 +142,8 @@ class SimpleGridDeltaInfo:
         self.num_actions: int = self.env.num_actions
         self.delta_info_times_action_distribution = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions,),
                                                                 dtype=torch.float32)
-        self.grid_feature_vectors = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions * 3 + 1,),
-                                                dtype=torch.float32)  # action distribution + available_transition + r(s, a) + r(s)
+        self.grid_feature_vectors = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions * 3 + 1 + 2,),
+                                                dtype=torch.float32)  # action distribution + available_transition + r(s, a) + r(s) + position
         self.available_positions: list[tuple[int, int]] = []
 
     def add(
@@ -177,7 +174,7 @@ class SimpleGridDeltaInfo:
         self.delta_info_grid[position] = delta_control_info
         self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution
         self.available_positions.append(position)
-        self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], connections, rewards))
+        self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], connections, rewards, torch.FloatTensor(position)))
 
     def compute_distances(self) -> dict[frozenset, float]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
@@ -201,7 +198,7 @@ class SimpleGridDeltaInfo:
         merge_sequence: list[frozenset] = sorted(distances, key=lambda k: distances[k])
         return merge_sequence
 
-    def make_cluster(self, merge_sequence: list[frozenset], num_clusters_to_keep: int, ) -> set[
+    def make_cluster(self, merge_sequence: list[frozenset], num_clusters_to_keep: int) -> set[
         frozenset[tuple[int, int]]]:
         graph = self.env.make_directed_graph()
         # init clusters
@@ -515,6 +512,10 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_classified_grid(self, filepath, max_num_groups: int or None=None):
         merge_sequence = self.record.compute_merge_sequence()
         self.record.plot_classified_grid(merge_sequence, filepath, max_num_groups=max_num_groups)
+
+    def make_cluster(self, num_clusters_to_keep: int) -> set[frozenset[tuple[int, int]]]:
+        merge_sequence = self.record.compute_merge_sequence()
+        return self.record.make_cluster(merge_sequence, num_clusters_to_keep)
 
 
 if __name__ == "__main__":
