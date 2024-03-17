@@ -1,15 +1,14 @@
 import collections
 import random
-import time
 
 import gymnasium
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
 import pygame
 import torch
 from gymnasium import spaces
-import numpy as np
 from torchvision.transforms import transforms
-import networkx as nx
-import matplotlib.pyplot as plt
 
 ACTION_NAMES = {
     0: 'UP',
@@ -17,6 +16,22 @@ ACTION_NAMES = {
     2: 'LEFT',
     3: 'RIGHT',
 }
+
+
+def rotate_grid(grid):
+    """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
+    rotations = random.choice([0, 1, 2, 3])
+    return np.rot90(grid, k=rotations)
+
+
+def flip_grid(grid):
+    """Flip the grid randomly: horizontally, vertically, or not at all."""
+    flip_type = random.choice(["horizontal", "vertical", "none"])
+    if flip_type == "horizontal":
+        return np.fliplr(grid)
+    elif flip_type == "vertical":
+        return np.flipud(grid)
+    return grid
 
 
 class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
@@ -61,7 +76,8 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     """
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
-    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None, random_traps=0, make_random=False, max_steps=128):
+    def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None,
+                 random_traps=0, make_random=False, max_steps=128):
         super(SimpleGridWorld, self).__init__()
         self.random = make_random
         self.max_steps = max_steps
@@ -128,16 +144,20 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             for action in ACTION_NAMES.keys():
                 delta = deltas[action]
                 new_position = (self.agent_position[0] + delta[0], self.agent_position[1] + delta[1])
+                rewards[len(ACTION_NAMES)] = 5 if self.agent_position == self.goal_position else -1 if (self.grid[
+                                                                                                            self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
                 if 0 <= new_position[0] < self.grid.shape[0] and 0 <= new_position[1] < self.grid.shape[1]:
                     if self.grid[new_position] not in ['W']:
                         # new position reachable
                         connections[action] = 1.0
                         rewards[action] = 0.0
+                        rewards[action] += 5 if new_position == self.goal_position else -1 if (
+                                    self.grid[new_position] == 'X' or new_position in self.pos_random_traps) else -0.01
                     elif self.grid[new_position] == 'W':
                         # hits wall
                         connections[action] = 0.0
                         rewards[action] = -0.1
-            rewards[len(ACTION_NAMES)] = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
+                        rewards[action] += rewards[len(ACTION_NAMES)]
             connections = torch.tensor([connections[i] for i in range(len(connections))])
             rewards = torch.tensor([rewards[i] for i in range(len(rewards))])
             return observation, terminated, self.agent_position, connections, rewards
@@ -150,7 +170,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
     def directed_reachable_positions(self, position: tuple[int, int]) -> list[tuple[int, int]]:
         x, y = position
-        potential_neighbours = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]  # Neighbors are up, down, left, right
+        potential_neighbours = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]  # Neighbors are up, down, left, right
         reachable_positions = []
         if self.grid[x, y] in ['W'] or position == self.goal_position:
             return reachable_positions
@@ -200,29 +220,11 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         return graph
 
-    def reset_iterator(self):
-        self.iter_index = 0
-        self.iter_coord = (0, 0)
-
     def load_grid(self, text_file):
         with open(text_file, 'r') as file:
             lines = file.read().splitlines()
         self.grid = np.array([list(line) for line in lines])
         return self.grid
-
-    def rotate_grid(self, grid):
-        """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
-        rotations = random.choice([0, 1, 2, 3])
-        return np.rot90(grid, k=rotations)
-
-    def flip_grid(self, grid):
-        """Flip the grid randomly: horizontally, vertically, or not at all."""
-        flip_type = random.choice(["horizontal", "vertical", "none"])
-        if flip_type == "horizontal":
-            return np.fliplr(grid)
-        elif flip_type == "vertical":
-            return np.flipud(grid)
-        return grid
 
     def reset_positions(self):
         self.occupied_positions = set()
@@ -267,7 +269,8 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
         truncated = False
-        reward = 5 if self.agent_position == self.goal_position else -1 if (self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
+        reward = 5 if self.agent_position == self.goal_position else -1 if (
+                    self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
         if hits_wall:
             reward -= 0.1
 
@@ -286,13 +289,9 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.step_count = 0
         if self.random:
             # Randomly rotate the grid
-            self.grid = self.rotate_grid(self.grid)
+            self.grid = rotate_grid(self.grid)
             # Randomly flip the grid
-            self.grid = self.flip_grid(self.grid)
-        # if not self._agent_position:
-        #     self.agent_position = self.assign_position({self.goal_position})
-        # if not self._goal_position:
-        #     self.goal_position = self.assign_position({self.agent_position})
+            self.grid = flip_grid(self.grid)
         self.reset_positions()
 
         self._render_to_surface()
@@ -336,7 +335,6 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     def render(self, mode='rgb_array'):
         if mode == 'human':
             if self.cached_surface is not None:
-                pygame.init()
                 window = pygame.display.set_mode(self.screen_size)
                 window.blit(self.cached_surface, (0, 0))
                 pygame.display.flip()
@@ -363,21 +361,22 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             pygame.quit()
             self.viewer = None
 
-    def handle_keyboard_input(self):
+    def handle_keyboard_input(self) -> int:
         action = None
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:
-                    action = 0
-                elif event.key == pygame.K_DOWN:
-                    action = 1
-                elif event.key == pygame.K_LEFT:
-                    action = 2
-                elif event.key == pygame.K_RIGHT:
-                    action = 3
+        while action is None:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        action = 0
+                    elif event.key == pygame.K_DOWN:
+                        action = 1
+                    elif event.key == pygame.K_LEFT:
+                        action = 2
+                    elif event.key == pygame.K_RIGHT:
+                        action = 3
         return action
 
 
@@ -407,10 +406,130 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
     return processed_tensor
 
 
+class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
+    def __init__(self, simple_gridworld: SimpleGridWorld, clusters: set[frozenset[tuple[int, int]]]):
+        super(SimpleGridWorldWithStateAbstraction, self).__init__()
+        self.simple_gridworld = simple_gridworld
+
+        # get clusters
+        self.clusters = clusters
+        self.clusters_in_dict = {i: group for i, group in enumerate(self.clusters)}
+        self.position_to_cluster = {}
+        for i in range(self.simple_gridworld.grid.shape[0]):
+            for j in range(self.simple_gridworld.grid.shape[1]):
+                for idx in self.clusters_in_dict.keys():
+                    if (i, j) in self.clusters_in_dict[idx]:
+                        self.position_to_cluster[(i, j)] = idx
+
+        # cancel randomization
+        # start position can still be random
+        # self.simple_gridworld._agent_position = self.simple_gridworld.agent_position
+        self.simple_gridworld._goal_position = self.simple_gridworld.goal_position
+        self.simple_gridworld.random_traps = 0
+        self.simple_gridworld.random = False
+        self.reset()
+
+    def step(self, action):
+        self.simple_gridworld.step_count += 1
+        if self.simple_gridworld.step_count >= self.simple_gridworld.max_steps:
+            terminated = True
+            truncated = True
+            reward = 0
+        else:
+            deltas = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
+            delta = deltas[action]
+            new_position = (
+            self.simple_gridworld.agent_position[0] + delta[0], self.simple_gridworld.agent_position[1] + delta[1])
+
+            previous_position = self.simple_gridworld.agent_position
+
+            hits_wall = False
+            if 0 <= new_position[0] < self.simple_gridworld.shape[0] and 0 <= new_position[1] < \
+                    self.simple_gridworld.grid.shape[1]:
+                if self.simple_gridworld.grid[new_position] not in ['W']:
+                    self.simple_gridworld.agent_position = new_position
+                elif self.simple_gridworld.grid[new_position] == 'W':
+                    hits_wall = True
+
+            terminated = self.simple_gridworld.agent_position == self.simple_gridworld.goal_position
+            truncated = False
+            reward = 5 if self.simple_gridworld.agent_position == self.simple_gridworld.goal_position else -1 if (
+                    self.simple_gridworld.grid[
+                        self.simple_gridworld.agent_position] == 'X' or self.simple_gridworld.agent_position in self.simple_gridworld.pos_random_traps) else 0.0
+            if hits_wall:
+                reward -= 0.1
+                reward -= 0.01
+            else:
+                new_position = self.simple_gridworld.agent_position
+                momentum = np.array(new_position, dtype=np.float32) - np.array(previous_position, dtype=np.float32)
+                new_position_group = self.position_to_cluster[new_position]
+
+                # get random new position
+                rand_new_position = new_position
+                radian_th = 0.01
+                radian = 3.14159265 * 0.5 * radian_th  # expected radian
+                rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
+                random.shuffle(rand_candidates)
+                for pos in rand_candidates:
+                    rand_momentum = np.array(pos) - np.array(previous_position)
+                    # compute radian:
+                    # Calculate the dot product
+                    dot_product = np.dot(momentum, rand_momentum)
+                    # Calculate the magnitudes
+                    magnitude_a = np.linalg.norm(momentum)
+                    magnitude_b = np.linalg.norm(rand_momentum)
+                    # if moving only one block or not moving at all:
+                    if magnitude_b == 0:
+                        continue
+                    # compute the cosine of the angle
+                    cos_angle = dot_product / (magnitude_a * magnitude_b)
+                    # Calculate the angle in radians
+                    angle_radians = np.arccos(cos_angle)
+                    if angle_radians <= radian:
+                        distance_to_old = np.linalg.norm(np.array(pos) - np.array(previous_position))
+                        distance_to_new = np.linalg.norm(np.array(pos) - np.array(new_position))
+                        if distance_to_old >= distance_to_new:
+                            rand_new_position = pos
+                            # print(momentum, rand_momentum, general_momentum)
+                            reward -= 0.01 * np.sum(np.abs(rand_momentum))
+                            break
+                self.simple_gridworld.agent_position = rand_new_position
+
+        self.simple_gridworld._render_to_surface()
+        observation = self.simple_gridworld.get_observation()
+        observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
+        observation /= 255.0 if observation.max() > 1.0 else 1.0
+        # print(reward)
+        return observation, reward, terminated, truncated, {"position": self.simple_gridworld.agent_position}
+
+    def reset(self, seed=None, options=None):
+        return self.simple_gridworld.reset(seed, options)
+
+    def render(self, mode="rgb_array"):
+        return self.simple_gridworld.render(mode)
+
+    def close(self):
+        self.simple_gridworld.close()
+
+    def handle_keyboard_input(self):
+        return self.simple_gridworld.handle_keyboard_input()
+
+
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', agent_position=(1, 1), goal_position=(1, 1), random_traps=0)
-    env.make_directed_graph(show=True)
-    exit()
+    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', make_random=True, random_traps=5)
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.vec_env import DummyVecEnv
+    from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
+
+    dummy_env = DummyVecEnv([lambda: env])
+    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-prior-149.zip", env=env, verbose=1)
+    agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
+    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent)
+    sampler.sample()
+    cluster = sampler.make_cluster(45)
+    env = SimpleGridWorldWithStateAbstraction(env, cluster)
+    # env.make_directed_graph(show=True)
+    # exit()
     obs = env.reset()
     done = False
     reward_sum = 0
@@ -426,5 +545,5 @@ if __name__ == "__main__":
             elif truncated:
                 print("Episode truncated.")
                 done = True
-        time.sleep(0.1)
+        # time.sleep(0.1)
     env.close()
