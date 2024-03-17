@@ -253,7 +253,7 @@ class TestAndLogCallback(BaseCallback):
                 self.tb_writer.add_scalar(f'{env_name}/std_reward', std_reward, self.num_timesteps)
 
                 if self.verbose > 0:
-                    print(f"Step: {self.num_timesteps}. {self.session_name}-{env_name} Mean reward: {mean_reward} +/- {std_reward}.")
+                    print(f"Step: {self.num_timesteps}. {env_name} Mean reward: {mean_reward} +/- {std_reward}.")
         return True
 
     def _on_training_end(self) -> None:
