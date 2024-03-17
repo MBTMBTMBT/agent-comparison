@@ -427,6 +427,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
         self.simple_gridworld._goal_position = self.simple_gridworld.goal_position
         self.simple_gridworld.random_traps = 0
         self.simple_gridworld.random = False
+        self.reset()
 
     def step(self, action):
         self.simple_gridworld.step_count += 1
@@ -498,7 +499,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
         observation = self.simple_gridworld.get_observation()
         observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
         observation /= 255.0 if observation.max() > 1.0 else 1.0
-        print(reward)
+        # print(reward)
         return observation, reward, terminated, truncated, {"position": self.simple_gridworld.agent_position}
 
     def reset(self, seed=None, options=None):
