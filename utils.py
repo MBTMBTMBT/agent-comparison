@@ -3,7 +3,11 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 import imageio
+import stable_baselines3.common.on_policy_algorithm
 import torch
+
+from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
+from simple_gridworld import SimpleGridWorld, SimpleGridWorldWithStateAbstraction
 
 
 def find_latest_checkpoint(model_dir):
@@ -89,7 +93,8 @@ def create_image_with_action(action_dict: dict[int, str], image, action, q_vals:
     return img_array
 
 
-def save_trajectory_as_gif(trajectory, rewards, action_dict: dict[int, str], folder="trajectories", filename="trajectory.gif"):
+def save_trajectory_as_gif(trajectory, rewards, action_dict: dict[int, str], folder="trajectories",
+                           filename="trajectory.gif"):
     """
     Saves the trajectory as a GIF in a specified folder, including step numbers and rewards.
 
@@ -105,3 +110,96 @@ def save_trajectory_as_gif(trajectory, rewards, action_dict: dict[int, str], fol
                            for step_number, (img, action, q_vals) in enumerate(trajectory)]
     imageio.mimsave(filepath, images_with_actions, fps=10)
 
+
+def make_env(configure: dict) -> SimpleGridWorld:
+    env = None
+    if configure["env_type"] == "SimpleGridworld":
+        if "cell_size" in configure.keys():
+            cell_size = configure["cell_size"]
+            if cell_size is None:
+                cell_size = (20, 20)
+        else:
+            cell_size = (20, 20)
+        if "obs_size" in configure.keys():
+            obs_size = configure["obs_size"]
+            if obs_size is None:
+                obs_size = (128, 128)
+        else:
+            obs_size = (128, 128)
+        if "agent_position" in configure.keys():
+            agent_position = configure["agent_position"]
+        else:
+            agent_position = None
+        if "goal_position" in configure.keys():
+            goal_position = configure["goal_position"]
+        else:
+            goal_position = None
+        if "num_random_traps" in configure.keys():
+            num_random_traps = configure["num_random_traps"]
+        else:
+            num_random_traps = 0
+        if "make_random" in configure.keys():
+            make_random = configure["make_random"]
+        else:
+            make_random = False
+        if "max_steps" in configure.keys():
+            max_steps = configure["max_steps"]
+        else:
+            max_steps = 128
+        env = SimpleGridWorld(
+            text_file=configure["env_file"],
+            cell_size=cell_size,
+            obs_size=obs_size,
+            agent_position=agent_position,
+            goal_position=goal_position,
+            random_traps=num_random_traps,
+            make_random=make_random,
+            max_steps=max_steps
+        )
+    return env
+
+
+def make_abs_env(
+        configure: dict,
+        prior_agent: stable_baselines3.PPO,
+        agent: stable_baselines3.PPO,
+        num_clusters: int,
+) -> SimpleGridWorldWithStateAbstraction:
+    env = make_env(configure)
+    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent)
+    sampler.sample()
+    cluster = sampler.make_cluster(num_clusters)
+    env = SimpleGridWorldWithStateAbstraction(env, cluster)
+    return env
+
+
+def save_model(model, iteration, base_name="simple-gridworld-ppo", save_dir="saved-models"):
+    """Save the model with a custom base name, iteration number, and directory."""
+    model_path = os.path.join(save_dir, f"{base_name}-{iteration}.zip")
+    model.save(model_path)
+    print(f"Model saved to {model_path}")
+
+
+def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models"):
+    """Find the most recently saved model based on iteration number and custom base name, and return its path and
+    iteration number."""
+    model_files = [f for f in os.listdir(save_dir) if f.startswith(base_name) and f.endswith('.zip')]
+    if not model_files:
+        return None, -1  # Return None for both model path and iteration number if no model files found
+    # Extracting iteration numbers
+    iteration_numbers = []
+    for f in model_files:
+        try:
+            iteration_numbers.append(int(f.replace(base_name + '-', '').split('.')[0]))
+        except ValueError:
+            pass
+    # iteration_numbers = [int(f.replace(base_name + '-', '').split('.')[0]) for f in model_files]
+    # Finding the index of the latest model
+    latest_model_index = iteration_numbers.index(max(iteration_numbers))
+    # Getting the latest model file name
+    latest_model = model_files[latest_model_index]
+    # Extracting the iteration number of the latest model
+    latest_model_iteration = iteration_numbers[latest_model_index]
+    if latest_model_iteration is None:
+        latest_model_iteration = -1
+    return os.path.join(save_dir, latest_model), latest_model_iteration
