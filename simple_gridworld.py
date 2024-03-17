@@ -11,6 +11,7 @@ from torchvision.transforms import transforms
 import networkx as nx
 import matplotlib.pyplot as plt
 
+
 ACTION_NAMES = {
     0: 'UP',
     1: 'DOWN',
@@ -332,7 +333,6 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     def render(self, mode='rgb_array'):
         if mode == 'human':
             if self.cached_surface is not None:
-                pygame.init()
                 window = pygame.display.set_mode(self.screen_size)
                 window.blit(self.cached_surface, (0, 0))
                 pygame.display.flip()
@@ -359,21 +359,22 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             pygame.quit()
             self.viewer = None
 
-    def handle_keyboard_input(self):
+    def handle_keyboard_input(self) -> int:
         action = None
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:
-                    action = 0
-                elif event.key == pygame.K_DOWN:
-                    action = 1
-                elif event.key == pygame.K_LEFT:
-                    action = 2
-                elif event.key == pygame.K_RIGHT:
-                    action = 3
+        while action is None:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        action = 0
+                    elif event.key == pygame.K_DOWN:
+                        action = 1
+                    elif event.key == pygame.K_LEFT:
+                        action = 2
+                    elif event.key == pygame.K_RIGHT:
+                        action = 3
         return action
 
 
@@ -456,11 +457,34 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
             momentum = np.array(new_position, dtype=np.float32) - np.array(previous_position, dtype=np.float32)
             new_position_group = self.position_to_cluster[new_position]
 
-            for _ in range(16384):
-                rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
-                rand_new_position = random.choice(rand_candidates)
-                # todo: check momentum for the new position (general correct direction)
-                # todo: check distance to new_position and old_position, make sure that first >= second
+            # get random new position
+            rand_new_position = new_position
+            radian_th = 0.01
+            radian = 3.14159265 * 0.5 * radian_th  # expected radian
+            rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
+            random.shuffle(rand_candidates)
+            for pos in rand_candidates:
+                rand_momentum = np.array(pos) - np.array(new_position)
+                # compute radian:
+                # Calculate the dot product
+                dot_product = np.dot(momentum, rand_momentum)
+                # Calculate the magnitudes
+                magnitude_a = np.linalg.norm(momentum)
+                magnitude_b = np.linalg.norm(rand_momentum)
+                if magnitude_b == 0:
+                    rand_new_position = pos
+                    break
+                # compute the cosine of the angle
+                cos_angle = dot_product / (magnitude_a * magnitude_b)
+                # Calculate the angle in radians
+                angle_radians = np.arccos(cos_angle)
+                if angle_radians <= radian:
+                    distance_to_old = np.linalg.norm(np.array(pos) - np.array(previous_position))
+                    distance_to_new = np.linalg.norm(np.array(pos) - np.array(new_position))
+                    if distance_to_old >= distance_to_new:
+                        rand_new_position = pos
+                        break
+            self.simple_gridworld.agent_position = rand_new_position
 
         self.simple_gridworld._render_to_surface()
         observation = self.simple_gridworld.get_observation()
@@ -471,11 +495,30 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
     def reset(self, seed=None, options=None):
         return self.simple_gridworld.reset(seed, options)
 
+    def render(self, mode="rgb_array"):
+        return self.simple_gridworld.render(mode)
+
+    def close(self):
+        self.simple_gridworld.close()
+
+    def handle_keyboard_input(self):
+        return self.simple_gridworld.handle_keyboard_input()
+
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', agent_position=(1, 1), goal_position=(1, 1), random_traps=0)
-    env.make_directed_graph(show=True)
-    exit()
+    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', agent_position=(1, 1), goal_position=(11, 11), random_traps=0)
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.vec_env import DummyVecEnv
+    from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
+    dummy_env = DummyVecEnv([lambda: env])
+    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-prior-149.zip", env=env, verbose=1)
+    agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
+    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent)
+    sampler.sample()
+    cluster = sampler.make_cluster(60)
+    env = SimpleGridWorldWithStateAbstraction(env, cluster)
+    # env.make_directed_graph(show=True)
+    # exit()
     obs = env.reset()
     done = False
     reward_sum = 0
@@ -491,5 +534,5 @@ if __name__ == "__main__":
             elif truncated:
                 print("Episode truncated.")
                 done = True
-        time.sleep(0.1)
+        # time.sleep(0.1)
     env.close()
