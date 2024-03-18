@@ -1,6 +1,6 @@
 if __name__ == "__main__":
     from stable_baselines3 import PPO
-    from configurations import train_env_configurations, test_env_configurations
+    from configurations import *
     from utils import *
     from functools import partial
     from stable_baselines3.common.env_util import DummyVecEnv
@@ -8,8 +8,8 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # repeat the trained envs, this may help increase randomization
-    rep = 2
-    _train_env_configurations = train_env_configurations
+    rep = 16
+    _train_env_configurations = maze13_train
     train_env_configurations = []
     for _ in range(rep):
         train_env_configurations += _train_env_configurations
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     env = DummyVecEnv(env_fns)
 
     # dir names
-    base_name = "simple-gridworld-ppo-abs-half"
+    base_name = "simple-gridworld-ppo-abs-maze-13"
     save_dir = "saved-models"
 
     # Create the save directory if it doesn't exist
@@ -27,10 +27,10 @@ if __name__ == "__main__":
 
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
-        test_env_configurations,
+        maze13_test,
         base_name+"-log",
         n_eval_episodes=10,
-        eval_freq=5000,
+        eval_freq=1000,
         deterministic=False,
         render=False,
         verbose=1,
@@ -38,13 +38,13 @@ if __name__ == "__main__":
 
     update_env_callback = UpdateEnvCallback(
         train_env_configurations,
-        num_clusters=45,
+        num_clusters=30,
         update_env_freq=1000,
-        update_agent_freq=20000,
+        update_agent_freq=5000,
         verbose=1,
-        abs_rate=0.5,
+        abs_rate=1.0,
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=3000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
+    model.learn(total_timesteps=500000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
