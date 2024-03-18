@@ -269,17 +269,22 @@ class UpdateEnvCallback(BaseCallback):
     def __init__(
             self,
             env_configurations: list[dict],
-            num_clusters: int,
+            num_clusters_start: int,
+            num_clusters_end: int,
             update_env_freq=10000,
+            update_num_clusters_freq=10000,
             update_agent_freq=200000,
             verbose=1,
             abs_rate=0.5,
     ):
         super(UpdateEnvCallback, self).__init__(verbose)
         self.env_configs = env_configurations
-        self.num_clusters = num_clusters
+        self.num_clusters_start = num_clusters_start
+        self.num_clusters = num_clusters_start
+        self.num_clusters_end = num_clusters_end
         self.update_env_freq = update_env_freq
         self.update_agent_freq = update_agent_freq
+        self.update_num_clusters_freq = update_num_clusters_freq
         self.prior_agent = None
         self.abs_rate = abs_rate
 
@@ -300,4 +305,8 @@ class UpdateEnvCallback(BaseCallback):
                 self.model.env.envs[i] = new_env
                 if self.verbose:
                     print(f"Updated environment {i} at step {self.num_timesteps}.")
+        if self.n_calls % self.update_num_clusters_freq == 0:
+            if self.num_clusters < self.num_clusters_end:
+                self.num_clusters += 1
+                print(f"Updated number of clusters: {self.num_clusters} at step {self.num_timesteps}.")
         return True
