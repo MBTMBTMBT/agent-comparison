@@ -468,8 +468,11 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
             env: SimpleGridWorld,
             agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
             prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
+            reset_env=False,
     ):
         self.env = env
+        if reset_env:
+            self.env.reset()
         self.agent = agent
         self.prior_agent = prior_agent
         self.record = SimpleGridDeltaInfo(self.env)
@@ -634,6 +637,17 @@ if __name__ == "__main__":
             "goal_position": (1, 1),
             "num_random_traps": 0,
             "make_random": True,
+            "max_steps": 512,
+        },
+        {
+            "env_type": "SimpleGridworld",
+            "env_file": "envs/simple_grid/special-maze-13.txt",
+            "cell_size": None,
+            "obs_size": None,
+            "agent_position": None,
+            "goal_position": (8, 2),
+            "num_random_traps": 0,
+            "make_random": False,
             "max_steps": 512,
         },
     ]
