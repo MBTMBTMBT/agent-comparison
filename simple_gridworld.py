@@ -587,6 +587,9 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
                             rand_new_position = pos
                             # print(momentum, rand_momentum, general_momentum)
                             reward -= 0.01 * np.sum(np.abs(rand_momentum))
+                            for passed_grid in passed_grids:
+                                if passed_grid in self.simple_gridworld.pos_random_traps or self.simple_gridworld.grid[passed_grid] in ['X']:
+                                    reward -= 1
                             break
                 self.simple_gridworld.agent_position = rand_new_position
 
@@ -621,7 +624,7 @@ if __name__ == "__main__":
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
-    cluster = sampler.make_cluster(30)
+    cluster = sampler.make_cluster(20)
     # sampler.plot_classified_grid("./gridworld-maze-traps-13.gif", 30)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     # env.make_directed_graph(show=True)
