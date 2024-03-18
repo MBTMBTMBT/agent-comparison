@@ -19,37 +19,22 @@ ACTION_NAMES = {
 }
 
 
-# def rotate_grid(grid):
-#     """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
-#     rotations = random.choice([0, 1, 2, 3])
-#     return np.rot90(grid, k=rotations)
-#
-#
-# def flip_grid(grid):
-#     """Flip the grid randomly: horizontally, vertically, or not at all."""
-#     flip_type = random.choice(["horizontal", "vertical", "none"])
-#     if flip_type == "horizontal":
-#         return np.fliplr(grid)
-#     elif flip_type == "vertical":
-#         return np.flipud(grid)
-#     return grid
-
-
 def rotate_grid(grid, coords):
-    """Rotate the grid randomly by 0, 90, 180, or 270 degrees. If coords is not None, update them accordingly.
+    """Rotate the grid randomly by 0, 90, 180, or 270 degrees. Update non-None coords accordingly, leaving None values in place.
 
     Args:
         grid (np.array): The grid to rotate.
-        coords (list of tuple or None): List of (row, col) coordinates to update, or None.
+        coords (list of tuple or None): List of (row, col) coordinates or None values to update.
 
     Returns:
-        tuple: The rotated grid and the updated list of coordinates, or None if coords was None.
+        tuple: The rotated grid and the updated list of coordinates with None values preserved.
     """
     rotations = random.choice([0, 1, 2, 3])
     grid_height, grid_width = grid.shape
-    if coords is not None:
-        new_coords = []
-        for row, col in coords:
+    new_coords = []
+    for coord in coords:
+        if coord is not None:
+            row, col = coord
             if rotations == 1:  # 90 degrees
                 new_coords.append((col, grid_height - 1 - row))
             elif rotations == 2:  # 180 degrees
@@ -57,41 +42,41 @@ def rotate_grid(grid, coords):
             elif rotations == 3:  # 270 degrees
                 new_coords.append((grid_width - 1 - col, row))
             else:  # 0 degrees, no change
-                new_coords.append((row, col))
-        return np.rot90(grid, k=rotations), new_coords
-    else:
-        return np.rot90(grid, k=rotations), None
+                new_coords.append(coord)
+        else:
+            new_coords.append(None)  # Preserve None in its position
+    return np.rot90(grid, k=rotations), new_coords
 
 
 def flip_grid(grid, coords):
-    """Flip the grid randomly: horizontally, vertically, or not at all. If coords is not None, update them accordingly.
+    """Flip the grid randomly: horizontally, vertically, or not at all. Update non-None coords accordingly, leaving None values in place.
 
     Args:
         grid (np.array): The grid to flip.
-        coords (list of tuple or None): List of (row, col) coordinates to update, or None.
+        coords (list of tuple or None): List of (row, col) coordinates or None values to update.
 
     Returns:
-        tuple: The flipped grid and the updated list of coordinates, or None if coords was None.
+        tuple: The flipped grid and the updated list of coordinates with None values preserved.
     """
     flip_type = random.choice(["horizontal", "vertical", "none"])
     grid_height, grid_width = grid.shape
-    if coords is not None:
-        new_coords = []
-        if flip_type == "horizontal":
-            for row, col in coords:
+    new_coords = []
+    for coord in coords:
+        if coord is not None:
+            row, col = coord
+            if flip_type == "horizontal":
                 new_coords.append((row, grid_width - 1 - col))
-            return np.fliplr(grid), new_coords
-        elif flip_type == "vertical":
-            for row, col in coords:
+            elif flip_type == "vertical":
                 new_coords.append((grid_height - 1 - row, col))
-            return np.flipud(grid), new_coords
-        return grid, coords  # No flip performed, return original grid and coords unchanged.
-    else:
-        if flip_type == "horizontal":
-            return np.fliplr(grid), None
-        elif flip_type == "vertical":
-            return np.flipud(grid), None
-        return grid, None  # No flip performed, return original grid and None for coords.
+            else:  # No flip, preserve original coord
+                new_coords.append(coord)
+        else:
+            new_coords.append(None)  # Preserve None in its position
+    if flip_type == "horizontal":
+        return np.fliplr(grid), new_coords
+    elif flip_type == "vertical":
+        return np.flipud(grid), new_coords
+    return grid, new_coords  # No flip performed, return original grid and coords with None preserved.
 
 
 def get_traversed_grids(pos: np.ndarray, previous_position: np.ndarray):
