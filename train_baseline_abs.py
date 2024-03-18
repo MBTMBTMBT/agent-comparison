@@ -8,7 +8,7 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # repeat the trained envs, this may help increase randomization
-    rep = 16
+    rep = 8
     _train_env_configurations = maze13_train
     train_env_configurations = []
     for _ in range(rep):
