@@ -19,7 +19,7 @@ if __name__ == "__main__":
     env = DummyVecEnv(env_fns)
 
     # dir names
-    base_name = "simple-gridworld-ppo-maze-13"
+    base_name = "simple-gridworld-ppo-maze-traps-13"
     save_dir = "saved-models"
 
     # Create the save directory if it doesn't exist
