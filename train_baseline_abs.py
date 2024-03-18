@@ -38,8 +38,10 @@ if __name__ == "__main__":
 
     update_env_callback = UpdateEnvCallback(
         train_env_configurations,
-        num_clusters=30,
+        num_clusters_start=30,
+        num_clusters_end=110,
         update_env_freq=1000,
+        update_num_clusters_freq=3000,
         update_agent_freq=5000,
         verbose=1,
         abs_rate=1.0,
