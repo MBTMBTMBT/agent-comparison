@@ -18,20 +18,79 @@ ACTION_NAMES = {
 }
 
 
-def rotate_grid(grid):
-    """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
+# def rotate_grid(grid):
+#     """Rotate the grid randomly by 0, 90, 180, or 270 degrees."""
+#     rotations = random.choice([0, 1, 2, 3])
+#     return np.rot90(grid, k=rotations)
+#
+#
+# def flip_grid(grid):
+#     """Flip the grid randomly: horizontally, vertically, or not at all."""
+#     flip_type = random.choice(["horizontal", "vertical", "none"])
+#     if flip_type == "horizontal":
+#         return np.fliplr(grid)
+#     elif flip_type == "vertical":
+#         return np.flipud(grid)
+#     return grid
+
+
+def rotate_grid(grid, coords):
+    """Rotate the grid randomly by 0, 90, 180, or 270 degrees. If coords is not None, update them accordingly.
+
+    Args:
+        grid (np.array): The grid to rotate.
+        coords (list of tuple or None): List of (row, col) coordinates to update, or None.
+
+    Returns:
+        tuple: The rotated grid and the updated list of coordinates, or None if coords was None.
+    """
     rotations = random.choice([0, 1, 2, 3])
-    return np.rot90(grid, k=rotations)
+    grid_height, grid_width = grid.shape
+    if coords is not None:
+        new_coords = []
+        for row, col in coords:
+            if rotations == 1:  # 90 degrees
+                new_coords.append((col, grid_height - 1 - row))
+            elif rotations == 2:  # 180 degrees
+                new_coords.append((grid_height - 1 - row, grid_width - 1 - col))
+            elif rotations == 3:  # 270 degrees
+                new_coords.append((grid_width - 1 - col, row))
+            else:  # 0 degrees, no change
+                new_coords.append((row, col))
+        return np.rot90(grid, k=rotations), new_coords
+    else:
+        return np.rot90(grid, k=rotations), None
 
 
-def flip_grid(grid):
-    """Flip the grid randomly: horizontally, vertically, or not at all."""
+def flip_grid(grid, coords):
+    """Flip the grid randomly: horizontally, vertically, or not at all. If coords is not None, update them accordingly.
+
+    Args:
+        grid (np.array): The grid to flip.
+        coords (list of tuple or None): List of (row, col) coordinates to update, or None.
+
+    Returns:
+        tuple: The flipped grid and the updated list of coordinates, or None if coords was None.
+    """
     flip_type = random.choice(["horizontal", "vertical", "none"])
-    if flip_type == "horizontal":
-        return np.fliplr(grid)
-    elif flip_type == "vertical":
-        return np.flipud(grid)
-    return grid
+    grid_height, grid_width = grid.shape
+    if coords is not None:
+        new_coords = []
+        if flip_type == "horizontal":
+            for row, col in coords:
+                new_coords.append((row, grid_width - 1 - col))
+            return np.fliplr(grid), new_coords
+        elif flip_type == "vertical":
+            for row, col in coords:
+                new_coords.append((grid_height - 1 - row, col))
+            return np.flipud(grid), new_coords
+        return grid, coords  # No flip performed, return original grid and coords unchanged.
+    else:
+        if flip_type == "horizontal":
+            return np.fliplr(grid), None
+        elif flip_type == "vertical":
+            return np.flipud(grid), None
+        return grid, None  # No flip performed, return original grid and None for coords.
 
 
 class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
@@ -294,9 +353,11 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         if not no_random:
             if self.random:
                 # Randomly rotate the grid
-                self.grid = rotate_grid(self.grid)
+                self.grid, (self._agent_position, self._goal_position, self.agent_position, self.goal_position) \
+                    = rotate_grid(self.grid, [self._agent_position, self._goal_position, self.agent_position, self.goal_position])
                 # Randomly flip the grid
-                self.grid = flip_grid(self.grid)
+                self.grid, (self._agent_position, self._goal_position, self.agent_position, self.goal_position) \
+                    = flip_grid(self.grid, [self._agent_position, self._goal_position, self.agent_position, self.goal_position])
             self.reset_positions()
         else:
             self.reset_positions(agent_only=True)
@@ -525,7 +586,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-13.txt', make_random=True, random_traps=5)
+    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-traps-13.txt', make_random=True, random_traps=0, agent_position=(11, 1), goal_position=(1, 11))
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv
     from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
@@ -535,7 +596,8 @@ if __name__ == "__main__":
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
-    cluster = sampler.make_cluster(30)
+    cluster = sampler.make_cluster(80)
+    sampler.plot_classified_grid("./gridworld-maze-traps-13.gif", 40)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     # env.make_directed_graph(show=True)
     # exit()
