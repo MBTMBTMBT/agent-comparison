@@ -1,5 +1,6 @@
 import copy
 import os
+import random
 import re
 import numpy as np
 import matplotlib.pyplot as plt
@@ -168,8 +169,11 @@ def make_abs_env(
         prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
         agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
         num_clusters: int,
-) -> SimpleGridWorldWithStateAbstraction:
+        abs_rate=0.5,
+) -> SimpleGridWorldWithStateAbstraction or SimpleGridWorld:
     env = make_env(configure)
+    if random.random() > abs_rate:
+        return env
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent)
     sampler.sample()
     cluster = sampler.make_cluster(num_clusters)
@@ -269,6 +273,7 @@ class UpdateEnvCallback(BaseCallback):
             update_env_freq=10000,
             update_agent_freq=200000,
             verbose=1,
+            abs_rate=0.5,
     ):
         super(UpdateEnvCallback, self).__init__(verbose)
         self.env_configs = env_configurations
@@ -276,6 +281,7 @@ class UpdateEnvCallback(BaseCallback):
         self.update_env_freq = update_env_freq
         self.update_agent_freq = update_agent_freq
         self.prior_agent = None
+        self.abs_rate = abs_rate
 
     def _on_step(self) -> bool:
         if self.prior_agent is None:
@@ -290,8 +296,8 @@ class UpdateEnvCallback(BaseCallback):
             print("Updated prior agent.")
         if self.n_calls % self.update_env_freq == 0:
             for i in range(len(self.model.env.envs)):
-                new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.num_clusters)
+                new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.num_clusters, self.abs_rate)
                 self.model.env.envs[i] = new_env
                 if self.verbose:
-                    print(f"Replaced environment {i} at step {self.num_timesteps}.")
+                    print(f"Updated environment {i} at step {self.num_timesteps}.")
         return True
