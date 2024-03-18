@@ -625,7 +625,7 @@ if __name__ == "__main__":
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
     cluster = sampler.make_cluster(30)
-    sampler.plot_classified_grid("./gridworld-maze-traps-13.gif", 30)
+    # sampler.plot_classified_grid("./gridworld-maze-traps-13.gif", 30)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     # env.make_directed_graph(show=True)
     # exit()
