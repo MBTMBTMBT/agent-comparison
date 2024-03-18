@@ -88,6 +88,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.screen_size = (self.grid.shape[1] * cell_size[0], self.grid.shape[0] * cell_size[1])
         self.viewer = None
         self.cached_surface = None
+        self.window = None
 
         self._agent_position = agent_position
         self._goal_position = goal_position
@@ -226,11 +227,14 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.grid = np.array([list(line) for line in lines])
         return self.grid
 
-    def reset_positions(self):
+    def reset_positions(self, agent_only=False):
         self.occupied_positions = set()
 
         self.agent_position = self._agent_position if self._agent_position else self.assign_position()
         self.occupied_positions.add(self.agent_position)
+
+        if agent_only:
+            return
 
         self.goal_position = self._goal_position if self._goal_position else self.assign_position()
         self.occupied_positions.add(self.goal_position)
@@ -284,15 +288,18 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             reward = 0
         return observation, reward, terminated, truncated, {"position": self.agent_position}
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None, no_random=False):
         super().reset(seed=seed)
         self.step_count = 0
-        if self.random:
-            # Randomly rotate the grid
-            self.grid = rotate_grid(self.grid)
-            # Randomly flip the grid
-            self.grid = flip_grid(self.grid)
-        self.reset_positions()
+        if not no_random:
+            if self.random:
+                # Randomly rotate the grid
+                self.grid = rotate_grid(self.grid)
+                # Randomly flip the grid
+                self.grid = flip_grid(self.grid)
+            self.reset_positions()
+        else:
+            self.reset_positions(agent_only=True)
 
         self._render_to_surface()
         observation = self.get_observation()
@@ -334,9 +341,11 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
     def render(self, mode='rgb_array'):
         if mode == 'human':
+            if self.window is None:
+                self.window = pygame.display.set_mode(self.screen_size)
+
             if self.cached_surface is not None:
-                window = pygame.display.set_mode(self.screen_size)
-                window.blit(self.cached_surface, (0, 0))
+                self.window.blit(self.cached_surface, (0, 0))
                 pygame.display.flip()
         elif mode == 'rgb_array':
             return self.get_observation()
@@ -503,7 +512,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
         return observation, reward, terminated, truncated, {"position": self.simple_gridworld.agent_position}
 
     def reset(self, seed=None, options=None):
-        return self.simple_gridworld.reset(seed, options)
+        return self.simple_gridworld.reset(seed, options, no_random=True)
 
     def render(self, mode="rgb_array"):
         return self.simple_gridworld.render(mode)
@@ -516,17 +525,17 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt', make_random=True, random_traps=5)
+    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-13.txt', make_random=True, random_traps=5)
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv
     from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
 
     dummy_env = DummyVecEnv([lambda: env])
-    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-prior-149.zip", env=env, verbose=1)
+    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
-    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent)
+    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
-    cluster = sampler.make_cluster(45)
+    cluster = sampler.make_cluster(30)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     # env.make_directed_graph(show=True)
     # exit()
