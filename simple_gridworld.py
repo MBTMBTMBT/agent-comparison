@@ -9,6 +9,7 @@ import pygame
 import torch
 from gymnasium import spaces
 from torchvision.transforms import transforms
+from itertools import product
 
 ACTION_NAMES = {
     0: 'UP',
@@ -91,6 +92,19 @@ def flip_grid(grid, coords):
         elif flip_type == "vertical":
             return np.flipud(grid), None
         return grid, None  # No flip performed, return original grid and None for coords.
+
+
+def get_traversed_grids(pos: np.ndarray, previous_position: np.ndarray):
+    # Determine the ranges for each dimension
+    ranges = [range(min(a, b), max(a, b) + 1) for a, b in zip(previous_position, pos)]
+
+    # Generate all combinations of these ranges across dimensions
+    all_points = list(product(*ranges))
+
+    # Convert tuples back to lists (or to whatever format is preferred)
+    traversed_grids = [list(point) for point in all_points]
+
+    return set(tuple(grid) for grid in traversed_grids)
 
 
 class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
@@ -556,6 +570,20 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
                     # Calculate the angle in radians
                     angle_radians = np.arccos(cos_angle)
                     if angle_radians <= radian:
+                        passed_grids = get_traversed_grids(np.array(pos), np.array(previous_position))
+                        continue_outer = False
+
+                        # generally avoid flying over a trap or a wall.
+                        for passed_grid in passed_grids:
+                            if passed_grid in self.simple_gridworld.pos_random_traps:
+                                continue_outer = True
+                                break
+                            if self.simple_gridworld.grid[passed_grid] in ['W', 'X']:
+                                continue_outer = True
+                                break
+                        if continue_outer:
+                            continue
+
                         distance_to_old = np.linalg.norm(np.array(pos) - np.array(previous_position))
                         distance_to_new = np.linalg.norm(np.array(pos) - np.array(new_position))
                         if distance_to_old >= distance_to_new:
@@ -596,8 +624,8 @@ if __name__ == "__main__":
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
-    cluster = sampler.make_cluster(80)
-    sampler.plot_classified_grid("./gridworld-maze-traps-13.gif", 40)
+    cluster = sampler.make_cluster(30)
+    sampler.plot_classified_grid("./gridworld-maze-traps-13.gif", 30)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     # env.make_directed_graph(show=True)
     # exit()
