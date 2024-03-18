@@ -224,20 +224,17 @@ test_env_configurations = [
 ]
 
 maze13_train = [
-    {
-        "env_type": "SimpleGridworld",
-        "env_file": "envs/simple_grid/gridworld-maze-13.txt",
-        "cell_size": None,
-        "obs_size": None,
-        "agent_position": None,
-        "goal_position": None,
-        "num_random_traps": 5,
-        "make_random": True,
-        "max_steps": 512,
-    },
-]
-
-maze13_test = [
+    # {
+    #     "env_type": "SimpleGridworld",
+    #     "env_file": "envs/simple_grid/gridworld-maze-13.txt",
+    #     "cell_size": None,
+    #     "obs_size": None,
+    #     "agent_position": (11, 1),
+    #     "goal_position": (1, 11),
+    #     "num_random_traps": 5,
+    #     "make_random": True,
+    #     "max_steps": 512,
+    # },
     {
         "env_type": "SimpleGridworld",
         "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
@@ -245,7 +242,32 @@ maze13_test = [
         "obs_size": None,
         "agent_position": (11, 1),
         "goal_position": (1, 11),
-        "num_random_traps": 0,
+        "num_random_traps": 5,
+        "make_random": True,
+        "max_steps": 512,
+    },
+]
+
+maze13_test = [
+    # {
+    #     "env_type": "SimpleGridworld",
+    #     "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
+    #     "cell_size": None,
+    #     "obs_size": None,
+    #     "agent_position": (11, 1),
+    #     "goal_position": (1, 11),
+    #     "num_random_traps": 0,
+    #     "make_random": True,
+    #     "max_steps": 512,
+    # },
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": (11, 1),
+        "goal_position": (1, 11),
+        "num_random_traps": 5,
         "make_random": True,
         "max_steps": 512,
     },
