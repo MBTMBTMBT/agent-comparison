@@ -39,14 +39,14 @@ if __name__ == "__main__":
     update_env_callback = UpdateEnvCallback(
         train_env_configurations,
         num_clusters_start=20,
-        num_clusters_end=80,
+        num_clusters_end=40,
         update_env_freq=1000,
         update_num_clusters_freq=3000,
         update_agent_freq=5000,
         verbose=1,
-        abs_rate=1.0,
+        abs_rate=0.5,
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=500000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
+    model.learn(total_timesteps=300000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
