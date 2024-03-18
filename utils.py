@@ -174,7 +174,7 @@ def make_abs_env(
     env = make_env(configure)
     if random.random() > abs_rate:
         return env
-    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent)
+    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
     cluster = sampler.make_cluster(num_clusters)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
