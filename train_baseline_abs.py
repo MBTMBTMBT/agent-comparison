@@ -7,7 +7,7 @@ if __name__ == "__main__":
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    env_fns = [partial(make_env, config) for config in train_env_configurations]
+    env_fns = [partial(make_env, config) for config in train_env_configurations] * 10
 
     env = DummyVecEnv(env_fns)
 
