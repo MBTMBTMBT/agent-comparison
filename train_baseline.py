@@ -8,8 +8,8 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # repeat the trained envs, this may help increase randomization
-    rep = 8
-    _train_env_configurations = maze13_train
+    rep = 2
+    _train_env_configurations = train_env_configurations
     train_env_configurations = []
     for _ in range(rep):
         train_env_configurations += _train_env_configurations
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     env = DummyVecEnv(env_fns)
 
     # dir names
-    base_name = "simple-gridworld-ppo-maze-traps-13"
+    base_name = "simple-gridworld-ppo"
     save_dir = "saved-models"
 
     # Create the save directory if it doesn't exist
@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
-        maze13_test,
+        test_env_configurations,
         base_name+"-log",
         n_eval_episodes=10,
         eval_freq=1000,
@@ -37,5 +37,5 @@ if __name__ == "__main__":
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=300000, callback=[test_and_log_callback], progress_bar=True)
+    model.learn(total_timesteps=2000000, callback=[test_and_log_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
