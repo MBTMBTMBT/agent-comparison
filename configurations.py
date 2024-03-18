@@ -251,13 +251,13 @@ maze13_train = [
 maze13_test = [
     {
         "env_type": "SimpleGridworld",
-        "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
+        "env_file": "envs/simple_grid/gridworld-maze-13.txt",
         "cell_size": None,
         "obs_size": None,
         "agent_position": (11, 1),
         "goal_position": (1, 11),
         "num_random_traps": 0,
-        "make_random": True,
+        "make_random": False,
         "max_steps": 512,
     },
     {
@@ -267,8 +267,8 @@ maze13_test = [
         "obs_size": None,
         "agent_position": (11, 1),
         "goal_position": (1, 11),
-        "num_random_traps": 5,
-        "make_random": True,
+        "num_random_traps": 0,
+        "make_random": False,
         "max_steps": 512,
     },
 ]
