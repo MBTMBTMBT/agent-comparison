@@ -573,12 +573,9 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
                         passed_grids = get_traversed_grids(np.array(pos), np.array(previous_position))
                         continue_outer = False
 
-                        # generally avoid flying over a trap or a wall.
+                        # generally avoid flying over someone not in the cluster.
                         for passed_grid in passed_grids:
-                            if passed_grid in self.simple_gridworld.pos_random_traps:
-                                continue_outer = True
-                                break
-                            if self.simple_gridworld.grid[passed_grid] in ['W', 'X']:
+                            if passed_grid not in rand_candidates:
                                 continue_outer = True
                                 break
                         if continue_outer:
