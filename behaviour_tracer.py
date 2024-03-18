@@ -277,7 +277,7 @@ class SimpleGridDeltaInfo:
                     _length = len(clusters)
                     clusters = _merge(pair_to_merge, clusters)
                     __length = len(clusters)
-                    if __length != _length:
+                    if __length != _length and __length <= g:
                         break
             clusters_in_dict = {i: group for i, group in enumerate(clusters)}
             position_to_cluster = {}
