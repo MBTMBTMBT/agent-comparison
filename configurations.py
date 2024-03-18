@@ -162,8 +162,8 @@ test_env_configurations = [
         "obs_size": None,
         "agent_position": (5, 1),
         "goal_position": (1, 5),
-        "num_random_traps": 3,
-        "make_random": True,
+        "num_random_traps": 0,
+        "make_random": False,
         "max_steps": 128,
     },
     {
@@ -173,8 +173,8 @@ test_env_configurations = [
         "obs_size": None,
         "agent_position": (11, 1),
         "goal_position": (1, 11),
-        "num_random_traps": 5,
-        "make_random": True,
+        "num_random_traps": 0,
+        "make_random": False,
         "max_steps": 512,
     },
     {
@@ -184,8 +184,8 @@ test_env_configurations = [
         "obs_size": None,
         "agent_position": (5, 1),
         "goal_position": (1, 5),
-        "num_random_traps": 3,
-        "make_random": True,
+        "num_random_traps": 0,
+        "make_random": False,
         "max_steps": 128,
     },
     {
@@ -195,8 +195,8 @@ test_env_configurations = [
         "obs_size": None,
         "agent_position": (11, 1),
         "goal_position": (2, 11),
-        "num_random_traps": 5,
-        "make_random": True,
+        "num_random_traps": 0,
+        "make_random": False,
         "max_steps": 512,
     },
     {
@@ -207,7 +207,7 @@ test_env_configurations = [
         "agent_position": (11, 1),
         "goal_position": (11, 11),
         "num_random_traps": 0,
-        "make_random": True,
+        "make_random": False,
         "max_steps": 512,
     },
     {
@@ -218,7 +218,7 @@ test_env_configurations = [
         "agent_position": (11, 1),
         "goal_position": (1, 11),
         "num_random_traps": 0,
-        "make_random": True,
+        "make_random": False,
         "max_steps": 512,
     },
 ]
