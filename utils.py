@@ -168,7 +168,7 @@ def make_abs_env(
         configure: dict,
         prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
         agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
-        num_clusters: int,
+        # num_clusters: int,
         abs_rate=0.5,
         plot_path=None,
 ) -> SimpleGridWorldWithStateAbstraction or SimpleGridWorld:
@@ -179,6 +179,10 @@ def make_abs_env(
     sampler.sample()
     if plot_path is not None:
         sampler.plot_grid(plot_path)
+    if "num_clusters" in configure.keys():
+        num_clusters = configure["num_clusters"]
+    else:
+        num_clusters = 16384
     cluster = sampler.make_clusters(num_clusters)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     return env
