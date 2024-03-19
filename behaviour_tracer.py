@@ -1,4 +1,5 @@
 import os
+import random
 
 import imageio
 import numpy as np
@@ -228,9 +229,8 @@ class SimpleGridDeltaInfo:
             clusters.add(frozenset([node]))  # Use frozenset for individual nodes
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
         bidirectional_nodes = set()
-        connection_graph = self.env.make_directed_graph()
-        for (u, v) in connection_graph.edges():
-            if (v, u) in connection_graph.edges():
+        for (u, v) in graph.edges():
+            if (v, u) in graph.edges():
                 bidirectional_nodes.add(u)
                 bidirectional_nodes.add(v)
         clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
@@ -336,7 +336,7 @@ class SimpleGridDeltaInfo:
         plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
         plt.close()
 
-    def plot_classified_grid(self, filepath, max_num_groups: int or None=None):
+    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None):
         # init clusters
         clusters: set[frozenset[tuple[int, int]]] = set()
         graph = self.env.make_directed_graph()
@@ -344,7 +344,8 @@ class SimpleGridDeltaInfo:
             clusters.add(frozenset([node]))  # Use frozenset for individual nodes
         if max_num_groups is None:
             max_num_groups = len(clusters)
-        min_num_groups = 2
+        if min_num_groups is None:
+            min_num_groups = 2
         frames = []  # List to store frames for the GIF
         previous_num_clusters = len(clusters)
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
@@ -370,6 +371,7 @@ class SimpleGridDeltaInfo:
             #         print("Warning: More groups kept than expected.")
             #         break
             while len(merge_sequence) > 0:
+                random.shuffle(merge_sequence)
                 pair_to_merge = merge_sequence.pop(0)
                 _length = len(clusters)
                 clusters = _merge(pair_to_merge, clusters)
@@ -392,6 +394,13 @@ class SimpleGridDeltaInfo:
                             break
                     if break_out:
                         break
+
+            # def cluster_sort_key(cluster):
+            #     return min(cluster)
+
+            # print(clusters)
+            # sorted_clusters = sorted(clusters, key=cluster_sort_key)
+            # clusters_in_dict = {i: group for i, group in enumerate(sorted_clusters)}
             clusters_in_dict = {i: group for i, group in enumerate(clusters)}
             position_to_cluster = {}
             for (i, j), info in self.dict_record.items():
@@ -626,11 +635,11 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_graph(self, filepath):
         self.record.plot_graph(filepath)
 
-    def plot_classified_grid(self, filepath, max_num_groups: int or None=None):
+    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None):
         # merge_sequence = self.record.compute_merge_sequence()
-        self.record.plot_classified_grid(filepath, max_num_groups=max_num_groups)
+        self.record.plot_classified_grid(filepath, max_num_groups=max_num_groups, min_num_groups=min_num_groups)
 
-    def make_cluster(self, num_clusters_to_keep: int) -> set[frozenset[tuple[int, int]]]:
+    def make_clusters(self, num_clusters_to_keep: int) -> set[frozenset[tuple[int, int]]]:
         # merge_sequence = self.record.compute_merge_sequence()
         return self.record.make_cluster(num_clusters_to_keep)
 
