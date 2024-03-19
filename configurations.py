@@ -198,7 +198,7 @@ train_env_configurations = [
         "num_random_traps": 5,
         "make_random": True,
         "max_steps": 256,
-        "num_clusters": 256,
+        "num_clusters": 384,
     },
 ]
 test_env_configurations = [
