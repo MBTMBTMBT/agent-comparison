@@ -217,8 +217,14 @@ class SimpleGridDeltaInfo:
 
     def compute_merge_sequence(self, cluster_feature_vectors_dict: dict[tuple[int, int], np.ndarray]):
         distances = self.compute_distances(cluster_feature_vectors_dict)
+        # Sort merge_sequence based on distances, same as before
         merge_sequence: list[frozenset] = sorted(distances, key=lambda k: distances[k])
-        return merge_sequence
+
+        # Extract and sort the distances
+        sorted_distances = sorted(distances.values())
+
+        # Return both merge_sequence and sorted_distances
+        return merge_sequence, sorted_distances
 
     def make_cluster(self, num_clusters_to_keep: int) -> set[
         frozenset[tuple[int, int]]]:
@@ -233,16 +239,20 @@ class SimpleGridDeltaInfo:
             if (v, u) in graph.edges():
                 bidirectional_nodes.add(u)
                 bidirectional_nodes.add(v)
-        clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
-        merge_sequence = self.compute_merge_sequence(clusters_feature_vector_map)
-        pair_to_merge = None
         while len(clusters) > num_clusters_to_keep:
+            clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
+            merge_sequence, sorted_distances = self.compute_merge_sequence(clusters_feature_vector_map)
+            # print(sorted_distances)
+            pair_to_merge = None
             while len(merge_sequence) > 0:
                 pair_to_merge = merge_sequence.pop(0)
+                sorted_distances.pop(0)
                 _length = len(clusters)
                 clusters = _merge(pair_to_merge, clusters)
                 __length = len(clusters)
-                if __length != _length and __length <= num_clusters_to_keep:
+                # print(__length)
+                if __length != _length:
+                    # print(sorted_distances)
                     break
             if len(merge_sequence) == 0:
                 print("Warning: More groups kept than expected.")
@@ -260,6 +270,7 @@ class SimpleGridDeltaInfo:
                             break
                     if break_out:
                         break
+        # print(len(clusters))
         return clusters
 
     # def make_cluster(self, num_clusters_to_keep: int) -> set[
@@ -355,45 +366,49 @@ class SimpleGridDeltaInfo:
             if (v, u) in connection_graph.edges():
                 bidirectional_nodes.add(u)
                 bidirectional_nodes.add(v)
-        clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
-        merge_sequence = self.compute_merge_sequence(clusters_feature_vector_map)
-        pair_to_merge = None
         for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
-            # if len(clusters) > g:
-            #     while len(merge_sequence) > 0:
-            #         pair_to_merge = merge_sequence.pop(0)
-            #         _length = len(clusters)
-            #         clusters = _merge(pair_to_merge, clusters)
-            #         __length = len(clusters)
-            #         if __length != _length and __length <= g:
-            #             break
-            #     if len(merge_sequence) == 0:
-            #         print("Warning: More groups kept than expected.")
-            #         break
-            while len(merge_sequence) > 0:
-                random.shuffle(merge_sequence)
-                pair_to_merge = merge_sequence.pop(0)
-                _length = len(clusters)
-                clusters = _merge(pair_to_merge, clusters)
-                __length = len(clusters)
-                if __length != _length and __length <= g:
-                    break
-            if len(merge_sequence) == 0:
-                print("Warning: More groups kept than expected.")
-                break
-            if pair_to_merge is not None:
-                break_out = False
-                for each in pair_to_merge:
-                    for each_cluster in clusters:
-                        if each in each_cluster:
-                            features = [grid_feature_vectors[pos] for pos in each_cluster]
-                            mean_vector = np.mean(features, axis=0)
-                            for pos in each_cluster:
-                                clusters_feature_vector_map[pos] = mean_vector
-                            break_out = True
-                            break
-                    if break_out:
+            while len(clusters) > g:
+                # if len(clusters) > g:
+                #     while len(merge_sequence) > 0:
+                #         pair_to_merge = merge_sequence.pop(0)
+                #         _length = len(clusters)
+                #         clusters = _merge(pair_to_merge, clusters)
+                #         __length = len(clusters)
+                #         if __length != _length and __length <= g:
+                #             break
+                #     if len(merge_sequence) == 0:
+                #         print("Warning: More groups kept than expected.")
+                #         break
+                clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
+                merge_sequence, sorted_distances = self.compute_merge_sequence(clusters_feature_vector_map)
+                # print(sorted_distances)
+                pair_to_merge = None
+                while len(merge_sequence) > 0:
+                    # merge_sequence
+                    pair_to_merge = merge_sequence.pop(0)
+                    sorted_distances.pop(0)
+                    _length = len(clusters)
+                    clusters = _merge(pair_to_merge, clusters)
+                    __length = len(clusters)
+                    if __length != _length:
+                        # print(sorted_distances)
                         break
+                if len(merge_sequence) == 0:
+                    print("Warning: More groups kept than expected.")
+                    break
+                if pair_to_merge is not None:
+                    break_out = False
+                    for each in pair_to_merge:
+                        for each_cluster in clusters:
+                            if each in each_cluster:
+                                features = [grid_feature_vectors[pos] for pos in each_cluster]
+                                mean_vector = np.mean(features, axis=0)
+                                for pos in each_cluster:
+                                    clusters_feature_vector_map[pos] = mean_vector
+                                break_out = True
+                                break
+                        if break_out:
+                            break
 
             # def cluster_sort_key(cluster):
             #     return min(cluster)
