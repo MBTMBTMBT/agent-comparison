@@ -40,11 +40,12 @@ if __name__ == "__main__":
         train_env_configurations,
         num_clusters_start=20,
         num_clusters_end=20,
-        update_env_freq=1000,
-        update_num_clusters_freq=3000,
-        update_agent_freq=5000,
+        update_env_freq=5000,
+        update_num_clusters_freq=10000,
+        update_agent_freq=100000,
         verbose=1,
         abs_rate=1,
+        plot_dir="results"
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
