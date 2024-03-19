@@ -170,12 +170,15 @@ def make_abs_env(
         agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
         num_clusters: int,
         abs_rate=0.5,
+        plot_path=None,
 ) -> SimpleGridWorldWithStateAbstraction or SimpleGridWorld:
     env = make_env(configure)
     if random.random() > abs_rate:
         return env
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
+    if plot_path is not None:
+        sampler.plot_grid(plot_path)
     cluster = sampler.make_cluster(num_clusters)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     return env
@@ -276,6 +279,7 @@ class UpdateEnvCallback(BaseCallback):
             update_agent_freq=200000,
             verbose=1,
             abs_rate=0.5,
+            plot_dir=None,
     ):
         super(UpdateEnvCallback, self).__init__(verbose)
         self.env_configs = env_configurations
@@ -287,6 +291,7 @@ class UpdateEnvCallback(BaseCallback):
         self.update_num_clusters_freq = update_num_clusters_freq
         self.prior_agent = None
         self.abs_rate = abs_rate
+        self.plot_dir = plot_dir
 
     def _on_step(self) -> bool:
         if self.prior_agent is None:
@@ -301,7 +306,11 @@ class UpdateEnvCallback(BaseCallback):
             print("Updated prior agent.")
         if self.n_calls % self.update_env_freq == 0:
             for i in range(len(self.model.env.envs)):
-                new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.num_clusters, self.abs_rate)
+                if self.plot_dir is not None:
+                    plot_path = os.path.join(self.plot_dir, self.env_configs[i]['env_file'].split('/')[-1]+f"step{self.n_calls}.png")
+                else:
+                    plot_path = None
+                new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.num_clusters, self.abs_rate, plot_path=plot_path)
                 self.model.env.envs[i] = new_env
                 if self.verbose:
                     print(f"Updated environment {i} at step {self.num_timesteps}.")
