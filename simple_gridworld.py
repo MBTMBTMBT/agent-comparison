@@ -606,7 +606,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-corridors-31.txt', make_random=True, random_traps=0, agent_position=(29, 1), goal_position=(1, 8))
+    env = SimpleGridWorld('envs/simple_grid/gridworld-rooms-31.txt', make_random=True, random_traps=0, agent_position=(29, 1), goal_position=(1, 8))
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv
     from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
@@ -616,9 +616,9 @@ if __name__ == "__main__":
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
-    clusters = sampler.make_clusters(128)
+    clusters = sampler.make_clusters(333)
     # print(clusters)
-    # sampler.plot_classified_grid("./gridworld-corridors-31.gif", 128, 128)
+    sampler.plot_classified_grid("./gridworld-rooms-31.gif", 333, 333)
     env = SimpleGridWorldWithStateAbstraction(env, clusters)
     # env.make_directed_graph(show=True)
     # exit()
