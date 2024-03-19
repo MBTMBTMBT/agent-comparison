@@ -179,7 +179,7 @@ def make_abs_env(
     sampler.sample()
     if plot_path is not None:
         sampler.plot_grid(plot_path)
-    cluster = sampler.make_cluster(num_clusters)
+    cluster = sampler.make_clusters(num_clusters)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     return env
 
