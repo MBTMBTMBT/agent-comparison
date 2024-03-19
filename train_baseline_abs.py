@@ -30,7 +30,7 @@ if __name__ == "__main__":
         test_env_configurations,
         base_name+"-log",
         n_eval_episodes=10,
-        eval_freq=1000,
+        eval_freq=2500,
         deterministic=False,
         render=False,
         verbose=1,
@@ -49,5 +49,5 @@ if __name__ == "__main__":
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=2000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
+    model.learn(total_timesteps=5000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
