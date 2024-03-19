@@ -481,8 +481,11 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
         self.simple_gridworld = simple_gridworld
 
         # get clusters
-        self.clusters = clusters
-        self.clusters_in_dict = {i: group for i, group in enumerate(self.clusters)}
+        def cluster_sort_key(cluster):
+            return min(cluster)
+
+        sorted_clusters = sorted(clusters, key=cluster_sort_key)
+        self.clusters_in_dict = {i: group for i, group in enumerate(sorted_clusters)}
         self.position_to_cluster = {}
         for i in range(self.simple_gridworld.grid.shape[0]):
             for j in range(self.simple_gridworld.grid.shape[1]):
@@ -532,50 +535,54 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
                 new_position = self.simple_gridworld.agent_position
                 momentum = np.array(new_position, dtype=np.float32) - np.array(previous_position, dtype=np.float32)
                 new_position_group = self.position_to_cluster[new_position]
+                old_position_group = self.position_to_cluster[previous_position]
+                # print(f"group {old_position_group} -> group {new_position_group}")
 
                 # get random new position
                 rand_new_position = new_position
-                radian_th = 0.01
-                radian = 3.14159265 * 0.5 * radian_th  # expected radian
-                rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
-                random.shuffle(rand_candidates)
-                for pos in rand_candidates:
-                    rand_momentum = np.array(pos) - np.array(previous_position)
-                    # compute radian:
-                    # Calculate the dot product
-                    dot_product = np.dot(momentum, rand_momentum)
-                    # Calculate the magnitudes
-                    magnitude_a = np.linalg.norm(momentum)
-                    magnitude_b = np.linalg.norm(rand_momentum)
-                    # if moving only one block or not moving at all:
-                    if magnitude_b == 0:
-                        continue
-                    # compute the cosine of the angle
-                    cos_angle = dot_product / (magnitude_a * magnitude_b)
-                    # Calculate the angle in radians
-                    angle_radians = np.arccos(cos_angle)
-                    if angle_radians <= radian:
-                        passed_grids = get_traversed_grids(np.array(pos), np.array(previous_position))
-                        continue_outer = False
-
-                        # generally avoid flying over someone not in the cluster.
-                        for passed_grid in passed_grids:
-                            if passed_grid not in rand_candidates:
-                                continue_outer = True
-                                break
-                        if continue_outer:
+                if old_position_group == new_position_group:
+                    radian_th = 0.01
+                    radian = 3.14159265 * 0.5 * radian_th  # expected radian
+                    rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
+                    random.shuffle(rand_candidates)
+                    for pos in rand_candidates:
+                        rand_momentum = np.array(pos) - np.array(previous_position)
+                        # compute radian:
+                        # Calculate the dot product
+                        dot_product = np.dot(momentum, rand_momentum)
+                        # Calculate the magnitudes
+                        magnitude_a = np.linalg.norm(momentum)
+                        magnitude_b = np.linalg.norm(rand_momentum)
+                        # if moving only one block or not moving at all:
+                        if magnitude_b == 0:
                             continue
+                        # compute the cosine of the angle
+                        cos_angle = dot_product / (magnitude_a * magnitude_b)
+                        # Calculate the angle in radians
+                        angle_radians = np.arccos(cos_angle)
+                        if angle_radians <= radian:
+                            passed_grids = get_traversed_grids(np.array(pos), np.array(previous_position))
+                            continue_outer = False
 
-                        distance_to_old = np.linalg.norm(np.array(pos) - np.array(previous_position))
-                        distance_to_new = np.linalg.norm(np.array(pos) - np.array(new_position))
-                        if distance_to_old >= distance_to_new:
-                            rand_new_position = pos
-                            # print(momentum, rand_momentum, general_momentum)
-                            reward -= 0.01 * np.sum(np.abs(rand_momentum))
+                            # generally avoid flying over someone not in the cluster.
                             for passed_grid in passed_grids:
-                                if passed_grid in self.simple_gridworld.pos_random_traps or self.simple_gridworld.grid[passed_grid] in ['X']:
-                                    reward -= 1
-                            break
+                                if passed_grid not in rand_candidates or self.simple_gridworld.grid[passed_grid] in ['W']:
+                                    continue_outer = True
+                                    break
+                            if continue_outer:
+                                continue
+
+                            distance_to_old = np.linalg.norm(np.array(pos) - np.array(previous_position))
+                            distance_to_new = np.linalg.norm(np.array(pos) - np.array(new_position))
+                            if distance_to_old >= distance_to_new:
+                                rand_new_position = pos
+                                # print(momentum, rand_momentum, general_momentum)
+                                reward -= 0.01 * np.sum(np.abs(rand_momentum))
+                                for passed_grid in passed_grids:
+                                    if passed_grid in self.simple_gridworld.pos_random_traps or self.simple_gridworld.grid[passed_grid] in ['X']:
+                                        reward -= 1
+                                break
+                # print(f"pos {previous_position} -> pos {rand_new_position}")
                 self.simple_gridworld.agent_position = rand_new_position
 
         self.simple_gridworld._render_to_surface()
@@ -599,7 +606,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-corridors-31.txt', make_random=True, random_traps=0, agent_position=(29, 1), goal_position=(1, 29))
+    env = SimpleGridWorld('envs/simple_grid/gridworld-corridors-31.txt', make_random=True, random_traps=0, agent_position=(29, 1), goal_position=(1, 8))
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv
     from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
@@ -609,9 +616,10 @@ if __name__ == "__main__":
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
-    cluster = sampler.make_cluster(320)
-    sampler.plot_classified_grid("./gridworld-corridors-31.gif", 320)
-    env = SimpleGridWorldWithStateAbstraction(env, cluster)
+    clusters = sampler.make_clusters(320)
+    # print(clusters)
+    sampler.plot_classified_grid("./gridworld-corridors-31.gif", 120, 120)
+    env = SimpleGridWorldWithStateAbstraction(env, clusters)
     # env.make_directed_graph(show=True)
     # exit()
     obs = env.reset()
