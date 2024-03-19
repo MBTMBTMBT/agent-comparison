@@ -173,7 +173,7 @@ class SimpleGridDeltaInfo:
             "delta_control_info": delta_control_info
         }
         self.delta_info_grid[position] = delta_control_info
-        self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution
+        self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution * 100
         self.available_positions.append(position)
         self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], connections, rewards, torch.FloatTensor(position)))
 
