@@ -8,7 +8,7 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # repeat the trained envs, this may help increase randomization
-    rep = 4
+    rep = 2
     _train_env_configurations = train_env_configurations
     train_env_configurations = []
     for _ in range(rep):
@@ -29,8 +29,8 @@ if __name__ == "__main__":
     test_and_log_callback = TestAndLogCallback(
         test_env_configurations,
         base_name+"-log",
-        n_eval_episodes=10,
-        eval_freq=2500,
+        n_eval_episodes=16,
+        eval_freq=5000,
         deterministic=False,
         render=False,
         verbose=1,

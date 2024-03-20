@@ -143,7 +143,7 @@ class SimpleGridDeltaInfo:
         self.num_actions: int = self.env.num_actions
         self.delta_info_times_action_distribution = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions,),
                                                                 dtype=torch.float32)
-        self.grid_feature_vectors = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions * 3 + 1 + 2,),
+        self.grid_feature_vectors = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions * 4 + 1 + 2,),
                                                 dtype=torch.float32)  # action distribution + available_transition + r(s, a) + r(s) + position
         self.available_positions: list[tuple[int, int]] = []
 
@@ -178,7 +178,7 @@ class SimpleGridDeltaInfo:
         self.delta_info_grid[position] = delta_control_info
         self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution * 100
         self.available_positions.append(position)
-        self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], connections, rewards, torch.FloatTensor(position)))
+        self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], action_distribution, connections, rewards, torch.FloatTensor(position)))
 
     def _compute_distances(self) -> dict[frozenset, float]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
@@ -226,8 +226,8 @@ class SimpleGridDeltaInfo:
         # Return both merge_sequence and sorted_distances
         return merge_sequence, sorted_distances
 
-    def make_cluster(self, num_clusters_to_keep: int) -> set[
-        frozenset[tuple[int, int]]]:
+    def make_cluster(self, num_clusters_to_keep: int, return_actions_dict=False) -> set[
+        frozenset[tuple[int, int]]] or (set[frozenset[tuple[int, int]]] and dict):
         graph = self.env.make_directed_graph()
         # init clusters
         clusters: set[frozenset[tuple[int, int]]] = set()
@@ -271,6 +271,20 @@ class SimpleGridDeltaInfo:
                     if break_out:
                         break
         # print(len(clusters))
+        if return_actions_dict:
+            clusters_action_map = {pos: self.dict_record[pos]['action'] for pos in bidirectional_nodes}
+            for cluster in clusters:
+                actions = []
+                for pos in cluster:
+                    if pos in clusters_action_map.keys():
+                        actions.append(clusters_action_map[pos])
+                act_count = []
+                for act in range(self.env.num_actions):
+                    act_count.append(actions.count(act))
+                selected = np.argmax(act_count)
+                for pos in cluster:
+                    clusters_action_map[pos] = selected
+            return clusters, clusters_action_map
         return clusters
 
     # def make_cluster(self, num_clusters_to_keep: int) -> set[
@@ -654,9 +668,9 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
         # merge_sequence = self.record.compute_merge_sequence()
         self.record.plot_classified_grid(filepath, max_num_groups=max_num_groups, min_num_groups=min_num_groups)
 
-    def make_clusters(self, num_clusters_to_keep: int) -> set[frozenset[tuple[int, int]]]:
+    def make_clusters(self, num_clusters_to_keep: int, return_actions_dict=False) -> set[frozenset[tuple[int, int]]]:
         # merge_sequence = self.record.compute_merge_sequence()
-        return self.record.make_cluster(num_clusters_to_keep)
+        return self.record.make_cluster(num_clusters_to_keep, return_actions_dict=return_actions_dict)
 
 
 if __name__ == "__main__":
