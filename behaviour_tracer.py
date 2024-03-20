@@ -1,4 +1,5 @@
 import os
+import random
 
 import imageio
 import numpy as np
@@ -10,7 +11,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 import networkx as nx
-
 
 
 def non_zero_softmax(x: torch.Tensor, epsilon=1e-10) -> torch.Tensor:
@@ -147,6 +147,9 @@ class SimpleGridDeltaInfo:
                                                 dtype=torch.float32)  # action distribution + available_transition + r(s, a) + r(s) + position
         self.available_positions: list[tuple[int, int]] = []
 
+        self.bidirectional_pairs = None
+        self.connection_graph = None
+
     def add(
             self,
             action: int,
@@ -177,7 +180,7 @@ class SimpleGridDeltaInfo:
         self.available_positions.append(position)
         self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], connections, rewards, torch.FloatTensor(position)))
 
-    def compute_distances(self) -> dict[frozenset, float]:
+    def _compute_distances(self) -> dict[frozenset, float]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
         connection_graph = self.env.make_directed_graph()
 
@@ -194,25 +197,115 @@ class SimpleGridDeltaInfo:
 
         return distances
 
-    def compute_merge_sequence(self):
-        distances = self.compute_distances()
-        merge_sequence: list[frozenset] = sorted(distances, key=lambda k: distances[k])
-        return merge_sequence
+    def compute_distances(self, cluster_feature_vectors_dict: dict[tuple[int, int], np.ndarray]) -> dict[frozenset, float]:
+        if self.connection_graph is None:
+            self.connection_graph = self.env.make_directed_graph()
 
-    def make_cluster(self, merge_sequence: list[frozenset], num_clusters_to_keep: int) -> set[
+        if self.bidirectional_pairs is None:
+            self.bidirectional_pairs = []
+            for (u, v) in self.connection_graph.edges():
+                if (v, u) in self.connection_graph.edges():
+                    self.bidirectional_pairs.append(frozenset((u, v)))
+
+        distances = {}
+        for u, v in self.bidirectional_pairs:
+            vector_u = cluster_feature_vectors_dict[u]
+            vector_v = cluster_feature_vectors_dict[v]
+            distances[frozenset((u, v))] = np.sqrt(np.sum((vector_u - vector_v) ** 2)).item()
+
+        return distances
+
+    def compute_merge_sequence(self, cluster_feature_vectors_dict: dict[tuple[int, int], np.ndarray]):
+        distances = self.compute_distances(cluster_feature_vectors_dict)
+        # Sort merge_sequence based on distances, same as before
+        merge_sequence: list[frozenset] = sorted(distances, key=lambda k: distances[k])
+
+        # Extract and sort the distances
+        sorted_distances = sorted(distances.values())
+
+        # Return both merge_sequence and sorted_distances
+        return merge_sequence, sorted_distances
+
+    def make_cluster(self, num_clusters_to_keep: int) -> set[
         frozenset[tuple[int, int]]]:
         graph = self.env.make_directed_graph()
         # init clusters
         clusters: set[frozenset[tuple[int, int]]] = set()
         for node in graph.nodes:
             clusters.add(frozenset([node]))  # Use frozenset for individual nodes
+        grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
+        bidirectional_nodes = set()
+        for (u, v) in graph.edges():
+            if (v, u) in graph.edges():
+                bidirectional_nodes.add(u)
+                bidirectional_nodes.add(v)
         while len(clusters) > num_clusters_to_keep:
-            if not merge_sequence:
+            clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
+            merge_sequence, sorted_distances = self.compute_merge_sequence(clusters_feature_vector_map)
+            # print(sorted_distances)
+            pair_to_merge = None
+            while len(merge_sequence) > 0:
+                pair_to_merge = merge_sequence.pop(0)
+                sorted_distances.pop(0)
+                _length = len(clusters)
+                clusters = _merge(pair_to_merge, clusters)
+                __length = len(clusters)
+                # print(__length)
+                if __length != _length:
+                    # print(sorted_distances)
+                    break
+            if len(merge_sequence) == 0:
                 print("Warning: More groups kept than expected.")
                 break
-            pair_to_merge = merge_sequence.pop(0)
-            clusters = _merge(pair_to_merge, clusters)
+            if pair_to_merge is not None:
+                break_out = False
+                for each in pair_to_merge:
+                    for each_cluster in clusters:
+                        if each in each_cluster:
+                            features = [grid_feature_vectors[pos] for pos in each_cluster]
+                            mean_vector = np.mean(features, axis=0)
+                            for pos in each_cluster:
+                                clusters_feature_vector_map[pos] = mean_vector
+                            break_out = True
+                            break
+                    if break_out:
+                        break
+        # print(len(clusters))
         return clusters
+
+    # def make_cluster(self, num_clusters_to_keep: int) -> set[
+    #     frozenset[tuple[int, int]]]:
+    #     graph = self.env.make_directed_graph()
+    #     # init clusters
+    #     clusters: set[frozenset[tuple[int, int]]] = set()
+    #     grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
+    #     bidirectional_nodes = set()
+    #     connection_graph = self.env.make_directed_graph()
+    #     for (u, v) in connection_graph.edges():
+    #         if (v, u) in connection_graph.edges():
+    #             bidirectional_nodes.add(u)
+    #             bidirectional_nodes.add(v)
+    #     clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
+    #     for
+    #     for node in graph.nodes:
+    #         clusters.add(frozenset([node]))  # Use frozenset for individual nodes
+    #     while len(clusters) > num_clusters_to_keep:
+    #         distances = {}
+    #         for u in bidirectional_nodes:
+    #             for v in bidirectional_nodes:
+    #                 if u != v and frozenset((v, u)) not in distances.keys():
+    #                     vector_u = clusters_feature_vector_map[u]
+    #                     vector_v = clusters_feature_vector_map[v]
+    #                     distances[frozenset((u, v))] = np.sqrt(np.sum((vector_u - vector_v) ** 2)).item()
+    #         merge_sequence: list[frozenset] = sorted(distances, key=lambda k: distances[k])
+    #         for potential_pair_to_merge in merge_sequence:
+    #             pass
+    #         if not merge_sequence:
+    #             print("Warning: More groups kept than expected.")
+    #             break
+    #         pair_to_merge = merge_sequence.pop(0)
+    #         clusters = _merge(pair_to_merge, clusters)
+    #     return clusters
 
     def plot_grid(self, filepath):
         height, width = self.delta_info_grid.shape
@@ -254,7 +347,7 @@ class SimpleGridDeltaInfo:
         plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
         plt.close()
 
-    def plot_classified_grid(self, merge_sequence: list[frozenset], filepath, max_num_groups: int or None=None):
+    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None):
         # init clusters
         clusters: set[frozenset[tuple[int, int]]] = set()
         graph = self.env.make_directed_graph()
@@ -262,23 +355,67 @@ class SimpleGridDeltaInfo:
             clusters.add(frozenset([node]))  # Use frozenset for individual nodes
         if max_num_groups is None:
             max_num_groups = len(clusters)
-        min_num_groups = 2
+        if min_num_groups is None:
+            min_num_groups = 2
         frames = []  # List to store frames for the GIF
         previous_num_clusters = len(clusters)
+        grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
+        bidirectional_nodes = set()
+        connection_graph = self.env.make_directed_graph()
+        for (u, v) in connection_graph.edges():
+            if (v, u) in connection_graph.edges():
+                bidirectional_nodes.add(u)
+                bidirectional_nodes.add(v)
         for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
-            if len(clusters) <= 5:
-                pass
-            if len(clusters) > g:
-                if len(merge_sequence) == 0:
-                    print("Warning: More groups kept than expected.")
-                    break
+            while len(clusters) > g:
+                # if len(clusters) > g:
+                #     while len(merge_sequence) > 0:
+                #         pair_to_merge = merge_sequence.pop(0)
+                #         _length = len(clusters)
+                #         clusters = _merge(pair_to_merge, clusters)
+                #         __length = len(clusters)
+                #         if __length != _length and __length <= g:
+                #             break
+                #     if len(merge_sequence) == 0:
+                #         print("Warning: More groups kept than expected.")
+                #         break
+                clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
+                merge_sequence, sorted_distances = self.compute_merge_sequence(clusters_feature_vector_map)
+                # print(sorted_distances)
+                pair_to_merge = None
                 while len(merge_sequence) > 0:
+                    # merge_sequence
                     pair_to_merge = merge_sequence.pop(0)
+                    sorted_distances.pop(0)
                     _length = len(clusters)
                     clusters = _merge(pair_to_merge, clusters)
                     __length = len(clusters)
-                    if __length != _length and __length <= g:
+                    if __length != _length:
+                        # print(sorted_distances)
                         break
+                if len(merge_sequence) == 0:
+                    print("Warning: More groups kept than expected.")
+                    break
+                if pair_to_merge is not None:
+                    break_out = False
+                    for each in pair_to_merge:
+                        for each_cluster in clusters:
+                            if each in each_cluster:
+                                features = [grid_feature_vectors[pos] for pos in each_cluster]
+                                mean_vector = np.mean(features, axis=0)
+                                for pos in each_cluster:
+                                    clusters_feature_vector_map[pos] = mean_vector
+                                break_out = True
+                                break
+                        if break_out:
+                            break
+
+            # def cluster_sort_key(cluster):
+            #     return min(cluster)
+
+            # print(clusters)
+            # sorted_clusters = sorted(clusters, key=cluster_sort_key)
+            # clusters_in_dict = {i: group for i, group in enumerate(sorted_clusters)}
             clusters_in_dict = {i: group for i, group in enumerate(clusters)}
             position_to_cluster = {}
             for (i, j), info in self.dict_record.items():
@@ -513,13 +650,13 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_graph(self, filepath):
         self.record.plot_graph(filepath)
 
-    def plot_classified_grid(self, filepath, max_num_groups: int or None=None):
-        merge_sequence = self.record.compute_merge_sequence()
-        self.record.plot_classified_grid(merge_sequence, filepath, max_num_groups=max_num_groups)
+    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None):
+        # merge_sequence = self.record.compute_merge_sequence()
+        self.record.plot_classified_grid(filepath, max_num_groups=max_num_groups, min_num_groups=min_num_groups)
 
-    def make_cluster(self, num_clusters_to_keep: int) -> set[frozenset[tuple[int, int]]]:
-        merge_sequence = self.record.compute_merge_sequence()
-        return self.record.make_cluster(merge_sequence, num_clusters_to_keep)
+    def make_clusters(self, num_clusters_to_keep: int) -> set[frozenset[tuple[int, int]]]:
+        # merge_sequence = self.record.compute_merge_sequence()
+        return self.record.make_cluster(num_clusters_to_keep)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # repeat the trained envs, this may help increase randomization
-    rep = 2
+    rep = 4
     _train_env_configurations = train_env_configurations
     train_env_configurations = []
     for _ in range(rep):
@@ -30,12 +30,12 @@ if __name__ == "__main__":
         test_env_configurations,
         base_name+"-log",
         n_eval_episodes=10,
-        eval_freq=1000,
+        eval_freq=2500,
         deterministic=False,
         render=False,
         verbose=1,
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=2000000, callback=[test_and_log_callback], progress_bar=True)
+    model.learn(total_timesteps=3000000, callback=[test_and_log_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)

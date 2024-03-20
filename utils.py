@@ -168,7 +168,7 @@ def make_abs_env(
         configure: dict,
         prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
         agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
-        num_clusters: int,
+        # num_clusters: int,
         abs_rate=0.5,
         plot_path=None,
 ) -> SimpleGridWorldWithStateAbstraction or SimpleGridWorld:
@@ -179,7 +179,11 @@ def make_abs_env(
     sampler.sample()
     if plot_path is not None:
         sampler.plot_grid(plot_path)
-    cluster = sampler.make_cluster(num_clusters)
+    if "num_clusters" in configure.keys():
+        num_clusters = configure["num_clusters"]
+    else:
+        num_clusters = 16384
+    cluster = sampler.make_clusters(num_clusters)
     env = SimpleGridWorldWithStateAbstraction(env, cluster)
     return env
 
@@ -307,10 +311,10 @@ class UpdateEnvCallback(BaseCallback):
         if self.n_calls % self.update_env_freq == 0:
             for i in range(len(self.model.env.envs)):
                 if self.plot_dir is not None:
-                    plot_path = os.path.join(self.plot_dir, self.env_configs[i]['env_file'].split('/')[-1]+f"step{self.n_calls}.png")
+                    plot_path = os.path.join(self.plot_dir, self.env_configs[i]['env_file'].split('/')[-1].split('.')[0]+f"-step{self.n_calls}.png")
                 else:
                     plot_path = None
-                new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.num_clusters, self.abs_rate, plot_path=plot_path)
+                new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.abs_rate, plot_path=plot_path)
                 self.model.env.envs[i] = new_env
                 if self.verbose:
                     print(f"Updated environment {i} at step {self.num_timesteps}.")
