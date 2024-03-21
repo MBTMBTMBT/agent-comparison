@@ -619,7 +619,7 @@ if __name__ == "__main__":
     sampler.sample()
     clusters, cluster_action_dict = sampler.make_clusters(64, return_actions_dict=True)
     # print(clusters)
-    sampler.plot_classified_grid("./gridworld-maze-31.gif", 64, 64)
+    sampler.plot_classified_grid("./gridworld-maze-31.gif", None, None, clusters=clusters)
     env = SimpleGridWorldWithStateAbstraction(env, clusters,)  # cluster_action_dict)
     # env.make_directed_graph(show=True)
     # exit()

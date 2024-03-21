@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     # repeat the trained envs, this may help increase randomization
     rep = 2
-    _train_env_configurations = train_env_configurations
+    _train_env_configurations = maze13_train
     train_env_configurations = []
     for _ in range(rep):
         train_env_configurations += _train_env_configurations
@@ -27,15 +27,15 @@ if __name__ == "__main__":
 
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
-        test_env_configurations,
+        maze13_test,
         base_name+"-log",
         n_eval_episodes=16,
-        eval_freq=5000,
+        eval_freq=10000,
         deterministic=False,
         render=False,
         verbose=1,
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=3000000, callback=[test_and_log_callback], progress_bar=True)
+    model.learn(total_timesteps=1000000, callback=[test_and_log_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
