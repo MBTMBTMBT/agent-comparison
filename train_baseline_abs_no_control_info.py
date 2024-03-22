@@ -19,7 +19,7 @@ if __name__ == "__main__":
     env = DummyVecEnv(env_fns)
 
     # dir names
-    base_name = "simple-gridworld-ppo"
+    base_name = "simple-gridworld-ppo-abs-no-control-info"
     save_dir = "saved-models"
 
     # Create the save directory if it doesn't exist
@@ -36,6 +36,19 @@ if __name__ == "__main__":
         verbose=1,
     )
 
+    update_env_callback = UpdateEnvCallback(
+        train_env_configurations,
+        num_clusters_start=20,
+        num_clusters_end=20,
+        update_env_freq=5000,
+        update_num_clusters_freq=25000,
+        update_agent_freq=20000,
+        verbose=1,
+        abs_rate=1,
+        alpha_param=0.0,
+        plot_dir=f"results/{base_name}",
+    )
+
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=5000000, callback=[test_and_log_callback], progress_bar=True)
+    model.learn(total_timesteps=5000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)

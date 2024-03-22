@@ -136,6 +136,7 @@ class SimpleGridDeltaInfo:
     def __init__(
             self,
             env: SimpleGridWorld,
+            alpha_param=100.0,
     ):
         self.env = env
         self.dict_record = {}
@@ -143,12 +144,13 @@ class SimpleGridDeltaInfo:
         self.num_actions: int = self.env.num_actions
         self.delta_info_times_action_distribution = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions,),
                                                                 dtype=torch.float32)
-        self.grid_feature_vectors = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions * 3 + 1 + 2,),
+        self.grid_feature_vectors = torch.zeros(size=self.delta_info_grid.shape + (self.num_actions * 4 + 1 + 2,),
                                                 dtype=torch.float32)  # action distribution + available_transition + r(s, a) + r(s) + position
         self.available_positions: list[tuple[int, int]] = []
 
         self.bidirectional_pairs = None
         self.connection_graph = None
+        self.alpha_param = alpha_param
 
     def add(
             self,
@@ -176,9 +178,9 @@ class SimpleGridDeltaInfo:
             "delta_control_info": delta_control_info
         }
         self.delta_info_grid[position] = delta_control_info
-        self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution * 100
+        self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution * self.alpha_param
         self.available_positions.append(position)
-        self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], connections, rewards, torch.FloatTensor(position)))
+        self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], action_distribution, connections, rewards, torch.FloatTensor(position)))
 
     def _compute_distances(self) -> dict[frozenset, float]:
         grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
@@ -226,8 +228,8 @@ class SimpleGridDeltaInfo:
         # Return both merge_sequence and sorted_distances
         return merge_sequence, sorted_distances
 
-    def make_cluster(self, num_clusters_to_keep: int) -> set[
-        frozenset[tuple[int, int]]]:
+    def make_cluster(self, num_clusters_to_keep: int, return_actions_dict=False) -> set[
+        frozenset[tuple[int, int]]] or (set[frozenset[tuple[int, int]]] and dict):
         graph = self.env.make_directed_graph()
         # init clusters
         clusters: set[frozenset[tuple[int, int]]] = set()
@@ -271,6 +273,20 @@ class SimpleGridDeltaInfo:
                     if break_out:
                         break
         # print(len(clusters))
+        if return_actions_dict:
+            clusters_action_map = {pos: self.dict_record[pos]['action'] for pos in bidirectional_nodes}
+            for cluster in clusters:
+                actions = []
+                for pos in cluster:
+                    if pos in clusters_action_map.keys():
+                        actions.append(clusters_action_map[pos])
+                act_count = []
+                for act in range(self.env.num_actions):
+                    act_count.append(actions.count(act))
+                selected = np.argmax(act_count)
+                for pos in cluster:
+                    clusters_action_map[pos] = selected
+            return clusters, clusters_action_map
         return clusters
 
     # def make_cluster(self, num_clusters_to_keep: int) -> set[
@@ -347,73 +363,135 @@ class SimpleGridDeltaInfo:
         plt.savefig(filepath, dpi=600)  # Set the resolution with the `dpi` argument
         plt.close()
 
-    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None):
-        # init clusters
-        clusters: set[frozenset[tuple[int, int]]] = set()
-        graph = self.env.make_directed_graph()
-        for node in graph.nodes:
-            clusters.add(frozenset([node]))  # Use frozenset for individual nodes
-        if max_num_groups is None:
-            max_num_groups = len(clusters)
-        if min_num_groups is None:
-            min_num_groups = 2
-        frames = []  # List to store frames for the GIF
-        previous_num_clusters = len(clusters)
-        grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
-        bidirectional_nodes = set()
-        connection_graph = self.env.make_directed_graph()
-        for (u, v) in connection_graph.edges():
-            if (v, u) in connection_graph.edges():
-                bidirectional_nodes.add(u)
-                bidirectional_nodes.add(v)
-        for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
-            while len(clusters) > g:
-                # if len(clusters) > g:
-                #     while len(merge_sequence) > 0:
-                #         pair_to_merge = merge_sequence.pop(0)
-                #         _length = len(clusters)
-                #         clusters = _merge(pair_to_merge, clusters)
-                #         __length = len(clusters)
-                #         if __length != _length and __length <= g:
-                #             break
-                #     if len(merge_sequence) == 0:
-                #         print("Warning: More groups kept than expected.")
-                #         break
-                clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
-                merge_sequence, sorted_distances = self.compute_merge_sequence(clusters_feature_vector_map)
-                # print(sorted_distances)
-                pair_to_merge = None
-                while len(merge_sequence) > 0:
-                    # merge_sequence
-                    pair_to_merge = merge_sequence.pop(0)
-                    sorted_distances.pop(0)
-                    _length = len(clusters)
-                    clusters = _merge(pair_to_merge, clusters)
-                    __length = len(clusters)
-                    if __length != _length:
-                        # print(sorted_distances)
-                        break
-                if len(merge_sequence) == 0:
-                    print("Warning: More groups kept than expected.")
-                    break
-                if pair_to_merge is not None:
-                    break_out = False
-                    for each in pair_to_merge:
-                        for each_cluster in clusters:
-                            if each in each_cluster:
-                                features = [grid_feature_vectors[pos] for pos in each_cluster]
-                                mean_vector = np.mean(features, axis=0)
-                                for pos in each_cluster:
-                                    clusters_feature_vector_map[pos] = mean_vector
-                                break_out = True
-                                break
-                        if break_out:
+    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None, clusters: set[frozenset[tuple[int, int]]] or None=None):
+        if clusters is None:
+            # init clusters
+            clusters: set[frozenset[tuple[int, int]]] = set()
+            graph = self.env.make_directed_graph()
+            for node in graph.nodes:
+                clusters.add(frozenset([node]))  # Use frozenset for individual nodes
+            if max_num_groups is None:
+                max_num_groups = len(clusters)
+            if min_num_groups is None:
+                min_num_groups = 2
+            frames = []  # List to store frames for the GIF
+            previous_num_clusters = len(clusters)
+            grid_feature_vectors = self.grid_feature_vectors.detach().cpu().numpy()
+            bidirectional_nodes = set()
+            connection_graph = self.env.make_directed_graph()
+            for (u, v) in connection_graph.edges():
+                if (v, u) in connection_graph.edges():
+                    bidirectional_nodes.add(u)
+                    bidirectional_nodes.add(v)
+
+            for g in range(max_num_groups, min_num_groups - 1, -1):  # Ensure correct loop direction
+                while len(clusters) > g:
+                    # if len(clusters) > g:
+                    #     while len(merge_sequence) > 0:
+                    #         pair_to_merge = merge_sequence.pop(0)
+                    #         _length = len(clusters)
+                    #         clusters = _merge(pair_to_merge, clusters)
+                    #         __length = len(clusters)
+                    #         if __length != _length and __length <= g:
+                    #             break
+                    #     if len(merge_sequence) == 0:
+                    #         print("Warning: More groups kept than expected.")
+                    #         break
+                    clusters_feature_vector_map = {pos: grid_feature_vectors[pos] for pos in bidirectional_nodes}
+                    merge_sequence, sorted_distances = self.compute_merge_sequence(clusters_feature_vector_map)
+                    # print(sorted_distances)
+                    pair_to_merge = None
+                    while len(merge_sequence) > 0:
+                        # merge_sequence
+                        pair_to_merge = merge_sequence.pop(0)
+                        sorted_distances.pop(0)
+                        _length = len(clusters)
+                        clusters = _merge(pair_to_merge, clusters)
+                        __length = len(clusters)
+                        if __length != _length:
+                            # print(sorted_distances)
                             break
+                    if len(merge_sequence) == 0:
+                        print("Warning: More groups kept than expected.")
+                        break
+                    if pair_to_merge is not None:
+                        break_out = False
+                        for each in pair_to_merge:
+                            for each_cluster in clusters:
+                                if each in each_cluster:
+                                    features = [grid_feature_vectors[pos] for pos in each_cluster]
+                                    mean_vector = np.mean(features, axis=0)
+                                    for pos in each_cluster:
+                                        clusters_feature_vector_map[pos] = mean_vector
+                                    break_out = True
+                                    break
+                            if break_out:
+                                break
 
-            # def cluster_sort_key(cluster):
-            #     return min(cluster)
+                # def cluster_sort_key(cluster):
+                #     return min(cluster)
 
-            # print(clusters)
+                # print(clusters)
+                # sorted_clusters = sorted(clusters, key=cluster_sort_key)
+                # clusters_in_dict = {i: group for i, group in enumerate(sorted_clusters)}
+                clusters_in_dict = {i: group for i, group in enumerate(clusters)}
+                position_to_cluster = {}
+                for (i, j), info in self.dict_record.items():
+                    for idx in clusters_in_dict.keys():
+                        if (i, j) in clusters_in_dict[idx]:
+                            position_to_cluster[(i, j)] = idx
+
+                height, width = self.delta_info_grid.shape
+                fig, ax = plt.subplots()
+                color_grid = np.zeros((height, width, 4))  # RGBA format
+                color_grid[:, :, 3] = 1  # Set alpha channel to 1 for all grid cells
+
+                # Generate a color for each cluster
+                num_clusters = len(clusters)
+                colors = cm.get_cmap('gist_rainbow', num_clusters)
+
+                # if previous_num_clusters == num_clusters:
+                #     plt.close(fig)
+                #     break
+                #
+                # previous_num_clusters = num_clusters
+
+                for pos, cluster_label in position_to_cluster.items():
+                    color_grid[pos] = colors(cluster_label - 1)[:3] + (1,)  # Set RGB and keep alpha=1
+
+                for (i, j), info in self.dict_record.items():
+                    if (i, j) in position_to_cluster:  # Keep original color if not in position_to_cluster
+                        if self.env.grid[(i, j)] == 'X':  # or rand traps...
+                            pass
+                            # color_grid[i, j] = [1, 0, 0, 1]  # Red for traps
+                        elif info['terminated']:
+                            color_grid[i, j] = [0, 1, 0, 1]  # Green for terminated states
+                    else:
+                        # Keep the original color based on delta_control_info
+                        pass
+
+                # Debugging: Directly set a few grid cells to check color assignment
+                # for i in range(5):
+                #     for j in range(5):
+                #         color_grid[i, j] = [1, 0, 0, 1]  # Red, fully opaque
+
+                ax.imshow(color_grid, origin='upper', extent=[0, width, 0, height])
+                ax.set_title(f'Total Classes: {num_clusters}')
+
+                # Change label to group index
+                for pos, cluster_label in position_to_cluster.items():
+                    ax.text(pos[1] + 0.5, height - pos[0] - 0.5, str(cluster_label), ha='center', va='center',
+                            color='white', fontsize=6)
+
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+                fig.canvas.draw()
+                frame = np.array(fig.canvas.renderer.buffer_rgba())
+                frames.append(frame)
+                plt.close(fig)
+
+        else:
             # sorted_clusters = sorted(clusters, key=cluster_sort_key)
             # clusters_in_dict = {i: group for i, group in enumerate(sorted_clusters)}
             clusters_in_dict = {i: group for i, group in enumerate(clusters)}
@@ -470,10 +548,10 @@ class SimpleGridDeltaInfo:
 
             fig.canvas.draw()
             frame = np.array(fig.canvas.renderer.buffer_rgba())
-            frames.append(frame)
+            frames = [frame,]
             plt.close(fig)
 
-        # Create GIF
+            # Create GIF
         imageio.mimsave(filepath, frames, fps=1)
 
     def plot_graph(self, filepath):
@@ -605,6 +683,7 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
             env: SimpleGridWorld,
             agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
             prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
+            alpha_param=100.0,
             reset_env=False,
     ):
         self.env = env
@@ -612,7 +691,7 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
             self.env.reset()
         self.agent = agent
         self.prior_agent = prior_agent
-        self.record = SimpleGridDeltaInfo(self.env)
+        self.record = SimpleGridDeltaInfo(self.env, alpha_param)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def sample(self):
@@ -650,13 +729,13 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
     def plot_graph(self, filepath):
         self.record.plot_graph(filepath)
 
-    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None):
+    def plot_classified_grid(self, filepath, max_num_groups: int or None=None, min_num_groups: int or None=None, clusters: set[frozenset[tuple[int, int]]] or None=None):
         # merge_sequence = self.record.compute_merge_sequence()
-        self.record.plot_classified_grid(filepath, max_num_groups=max_num_groups, min_num_groups=min_num_groups)
+        self.record.plot_classified_grid(filepath, max_num_groups=max_num_groups, min_num_groups=min_num_groups, clusters=clusters)
 
-    def make_clusters(self, num_clusters_to_keep: int) -> set[frozenset[tuple[int, int]]]:
+    def make_clusters(self, num_clusters_to_keep: int, return_actions_dict=False) -> set[frozenset[tuple[int, int]]]:
         # merge_sequence = self.record.compute_merge_sequence()
-        return self.record.make_cluster(num_clusters_to_keep)
+        return self.record.make_cluster(num_clusters_to_keep, return_actions_dict=return_actions_dict)
 
 
 if __name__ == "__main__":

@@ -8,8 +8,8 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # repeat the trained envs, this may help increase randomization
-    rep = 4
-    _train_env_configurations = train_env_configurations
+    rep = 2
+    _train_env_configurations = maze13_train
     train_env_configurations = []
     for _ in range(rep):
         train_env_configurations += _train_env_configurations
@@ -27,10 +27,10 @@ if __name__ == "__main__":
 
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
-        test_env_configurations,
+        maze13_test,
         base_name+"-log",
-        n_eval_episodes=10,
-        eval_freq=2500,
+        n_eval_episodes=16,
+        eval_freq=10000,
         deterministic=False,
         render=False,
         verbose=1,
@@ -41,13 +41,14 @@ if __name__ == "__main__":
         num_clusters_start=20,
         num_clusters_end=20,
         update_env_freq=5000,
-        update_num_clusters_freq=10000,
-        update_agent_freq=100000,
+        update_num_clusters_freq=25000,
+        update_agent_freq=20000,
         verbose=1,
-        abs_rate=0.5,
-        plot_dir="results"
+        abs_rate=1,
+        alpha_param=100.0,
+        plot_dir=f"results/{base_name}"
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=3000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
+    model.learn(total_timesteps=5000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)

@@ -19,7 +19,7 @@ train_env_configurations = [
         # "goal_position": (1, 11),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 2048,
         "num_clusters": 32,
     },
     # {
@@ -42,7 +42,7 @@ train_env_configurations = [
         # "goal_position": (1, 11),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 48,
     },
     # {
@@ -65,7 +65,7 @@ train_env_configurations = [
         # "goal_position": (1, 11),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 48,
     },
     {
@@ -77,7 +77,7 @@ train_env_configurations = [
         # "goal_position": (1, 7),
         "num_random_traps": 3,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 48,
     },
     {
@@ -101,7 +101,7 @@ train_env_configurations = [
         # "goal_position": (1, 11),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 48,
     },
     {
@@ -113,7 +113,7 @@ train_env_configurations = [
         # "goal_position": (1, 11),
         "num_random_traps": 0,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 64,
     },
     {
@@ -125,7 +125,7 @@ train_env_configurations = [
         # "goal_position": (1, 11),
         "num_random_traps": 0,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 48,
     },
     {
@@ -137,7 +137,7 @@ train_env_configurations = [
         # "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 2048,
         "num_clusters": 128,
     },
     {
@@ -149,7 +149,7 @@ train_env_configurations = [
         # "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 2048,
         "num_clusters": 128,
     },
     {
@@ -161,7 +161,7 @@ train_env_configurations = [
         # "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 2048,
         "num_clusters": 32,
     },
     {
@@ -173,7 +173,7 @@ train_env_configurations = [
         # "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 2048,
         "num_clusters": 32,
     },
     {
@@ -185,7 +185,7 @@ train_env_configurations = [
         # "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 2048,
         "num_clusters": 128,
     },
     {
@@ -197,7 +197,7 @@ train_env_configurations = [
         # "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 2048,
         "num_clusters": 384,
     },
 ]
@@ -233,7 +233,7 @@ test_env_configurations = [
         "goal_position": (11, 1),
         "num_random_traps": 0,
         "make_random": False,
-        "max_steps": 256,
+        "max_steps": 512,
     },
     # {
     #     "env_type": "SimpleGridworld",
@@ -310,7 +310,7 @@ test_env_configurations = [
         "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 512,
         "num_clusters": 128,
     },
     {
@@ -322,7 +322,7 @@ test_env_configurations = [
         "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 512,
         "num_clusters": 128,
     },
     {
@@ -334,7 +334,7 @@ test_env_configurations = [
         "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 512,
         "num_clusters": 32,
     },
     {
@@ -346,7 +346,7 @@ test_env_configurations = [
         "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 512,
         "num_clusters": 32,
     },
     {
@@ -358,7 +358,7 @@ test_env_configurations = [
         "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 512,
         "num_clusters": 128,
     },
     {
@@ -370,7 +370,7 @@ test_env_configurations = [
         "goal_position": (1, 29),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 256,
+        "max_steps": 512,
         "num_clusters": 384,
     },
 ]
@@ -385,7 +385,7 @@ maze13_train = [
         "goal_position": (1, 11),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 48,
     },
     {
@@ -397,7 +397,7 @@ maze13_train = [
         "goal_position": (1, 11),
         "num_random_traps": 5,
         "make_random": True,
-        "max_steps": 512,
+        "max_steps": 2048,
         "num_clusters": 48,
     },
 ]

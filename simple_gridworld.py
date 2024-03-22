@@ -476,9 +476,10 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
-    def __init__(self, simple_gridworld: SimpleGridWorld, clusters: set[frozenset[tuple[int, int]]]):
+    def __init__(self, simple_gridworld: SimpleGridWorld, clusters: set[frozenset[tuple[int, int]]], cluster_action_dict: dict=None):
         super(SimpleGridWorldWithStateAbstraction, self).__init__()
         self.simple_gridworld = simple_gridworld
+        self.cluster_action_dict = cluster_action_dict
 
         # get clusters
         def cluster_sort_key(cluster):
@@ -540,7 +541,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
                 # get random new position
                 rand_new_position = new_position
-                if old_position_group == new_position_group:
+                if old_position_group == new_position_group and (self.cluster_action_dict is None or self.cluster_action_dict[previous_position] == action):
                     radian_th = 0.01
                     radian = 3.14159265 * 0.5 * radian_th  # expected radian
                     rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
@@ -606,7 +607,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-rooms-31.txt', make_random=True, random_traps=0, agent_position=(29, 1), goal_position=(1, 8))
+    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-31.txt', make_random=True, random_traps=0, agent_position=(29, 1), goal_position=(1, 8))
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv
     from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
@@ -616,10 +617,10 @@ if __name__ == "__main__":
     agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
     sampler.sample()
-    clusters = sampler.make_clusters(333)
+    clusters, cluster_action_dict = sampler.make_clusters(64, return_actions_dict=True)
     # print(clusters)
-    sampler.plot_classified_grid("./gridworld-rooms-31.gif", 333, 333)
-    env = SimpleGridWorldWithStateAbstraction(env, clusters)
+    sampler.plot_classified_grid("./gridworld-maze-31.gif", None, None, clusters=clusters)
+    env = SimpleGridWorldWithStateAbstraction(env, clusters,)  # cluster_action_dict)
     # env.make_directed_graph(show=True)
     # exit()
     obs = env.reset()
