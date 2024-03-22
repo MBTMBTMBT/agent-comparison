@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     # repeat the trained envs, this may help increase randomization
     rep = 2
-    _train_env_configurations = maze13_train
+    _train_env_configurations = four_rooms_train
     train_env_configurations = []
     for _ in range(rep):
         train_env_configurations += _train_env_configurations
@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
-        maze13_test,
+        four_rooms_test,
         base_name+"-log",
         n_eval_episodes=16,
         eval_freq=10000,
