@@ -45,9 +45,10 @@ if __name__ == "__main__":
         update_agent_freq=20000,
         verbose=1,
         abs_rate=1,
-        plot_dir="results"
+        alpha_param=100.0,
+        plot_dir=f"results/{base_name}"
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=1000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
+    model.learn(total_timesteps=5000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
