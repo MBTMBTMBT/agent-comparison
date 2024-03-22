@@ -175,7 +175,7 @@ def make_abs_env(
         plot_path_cluster=None,
 ) -> SimpleGridWorldWithStateAbstraction or SimpleGridWorld:
     env = make_env(configure)
-    if random.random() > abs_rate:
+    if random.random() > abs_rate or ("do_abs" in configure.keys() and not configure["do_abs"]):
         return env
     sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, alpha_param, reset_env=True)
     sampler.sample()

@@ -387,6 +387,7 @@ maze13_train = [
         "make_random": True,
         "max_steps": 2048,
         "num_clusters": 48,
+        "do_abs": True,
     },
     {
         "env_type": "SimpleGridworld",
@@ -399,6 +400,7 @@ maze13_train = [
         "make_random": True,
         "max_steps": 2048,
         "num_clusters": 48,
+        "do_abs": True,
     },
 ]
 
@@ -413,6 +415,7 @@ maze13_test = [
         "num_random_traps": 0,
         "make_random": False,
         "max_steps": 512,
+        "do_abs": False,
     },
     {
         "env_type": "SimpleGridworld",
@@ -424,5 +427,62 @@ maze13_test = [
         "num_random_traps": 0,
         "make_random": False,
         "max_steps": 512,
+        "do_abs": False,
+    },
+]
+
+four_rooms_train = [
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-four-rooms-13.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": (11, 1),
+        "goal_position": (1, 11),
+        "num_random_traps": 5,
+        "make_random": True,
+        "max_steps": 2048,
+        "num_clusters": 48,
+        "do_abs": True,
+    },
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": (11, 1),
+        "goal_position": (1, 11),
+        "num_random_traps": 5,
+        "make_random": True,
+        "max_steps": 2048,
+        "num_clusters": 48,
+        "do_abs": True,
+    },
+]
+
+four_rooms_test = [
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-four-rooms-13.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": (11, 1),
+        "goal_position": (1, 11),
+        "num_random_traps": 0,
+        "make_random": False,
+        "max_steps": 512,
+        "do_abs": False,
+    },
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-four-rooms-trap-at-doors-13.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": (11, 1),
+        "goal_position": (1, 11),
+        "num_random_traps": 0,
+        "make_random": False,
+        "max_steps": 512,
+        "do_abs": False,
     },
 ]
