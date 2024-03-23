@@ -136,7 +136,7 @@ class SimpleGridDeltaInfo:
     def __init__(
             self,
             env: SimpleGridWorld,
-            alpha_param=100.0,
+            control_info_weight=100.0,
     ):
         self.env = env
         self.dict_record = {}
@@ -150,7 +150,7 @@ class SimpleGridDeltaInfo:
 
         self.bidirectional_pairs = None
         self.connection_graph = None
-        self.alpha_param = alpha_param
+        self.control_info_weight = control_info_weight
 
     def add(
             self,
@@ -178,7 +178,7 @@ class SimpleGridDeltaInfo:
             "delta_control_info": delta_control_info
         }
         self.delta_info_grid[position] = delta_control_info
-        self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution * self.alpha_param
+        self.delta_info_times_action_distribution[position] = delta_control_info * action_distribution * self.control_info_weight
         self.available_positions.append(position)
         self.grid_feature_vectors[position] = torch.cat((self.delta_info_times_action_distribution[position], action_distribution, connections, rewards, torch.FloatTensor(position)))
 
@@ -683,7 +683,7 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
             env: SimpleGridWorld,
             agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
             prior_agent: stable_baselines3.common.on_policy_algorithm.BaseAlgorithm,
-            alpha_param=100.0,
+            control_info_weight=100.0,
             reset_env=False,
     ):
         self.env = env
@@ -691,7 +691,7 @@ class BaselinePPOSimpleGridBehaviourIterSampler:
             self.env.reset()
         self.agent = agent
         self.prior_agent = prior_agent
-        self.record = SimpleGridDeltaInfo(self.env, alpha_param)
+        self.record = SimpleGridDeltaInfo(self.env, control_info_weight)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def sample(self):
