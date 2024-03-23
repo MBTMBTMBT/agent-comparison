@@ -486,3 +486,34 @@ four_rooms_test = [
         "do_abs": False,
     },
 ]
+
+rooms_31_train = [
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-rooms-31.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": (29, 1),
+        "goal_position": (1, 29),
+        "num_random_traps": 5,
+        "make_random": True,
+        "max_steps": 2048,
+        "num_clusters": 333,
+        "do_abs": True,
+    },
+]
+
+rooms_31_test = [
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-rooms-31.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": (29, 1),
+        "goal_position": (1, 29),
+        "num_random_traps": 0,
+        "make_random": False,
+        "max_steps": 512,
+        "do_abs": False,
+    },
+]

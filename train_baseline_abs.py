@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     # repeat the trained envs, this may help increase randomization
     rep = 2
-    _train_env_configurations = four_rooms_train
+    _train_env_configurations = rooms_31_train
     train_env_configurations = []
     for _ in range(rep):
         train_env_configurations += _train_env_configurations
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     env = DummyVecEnv(env_fns)
 
     # dir names
-    base_name = "simple-gridworld-ppo-abs"
+    base_name = "rooms-simple-gridworld-ppo-abs"
     save_dir = "saved-models"
 
     # Create the save directory if it doesn't exist
@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
-        four_rooms_test,
+        rooms_31_test,
         base_name+"-log",
         n_eval_episodes=16,
         eval_freq=10000,
@@ -45,10 +45,10 @@ if __name__ == "__main__":
         update_agent_freq=20000,
         verbose=1,
         abs_rate=1,
-        alpha_param=100.0,
+        control_info_weight=100.0,
         plot_dir=f"results/{base_name}"
     )
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
-    model.learn(total_timesteps=5000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
+    model.learn(total_timesteps=4000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
     save_model(model, 0, base_name, save_dir)
