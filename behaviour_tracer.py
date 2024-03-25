@@ -335,7 +335,7 @@ class SimpleGridDeltaInfo:
         cmap = cm.get_cmap('Blues')
 
         for (i, j), info in self.dict_record.items():
-            if self.env.grid[(i, j)] == 'X':  # Check if the cell is a trap
+            if self.env.grid[(i, j)] == 'X' or (i, j) in self.env.pos_random_traps:  # Check if the cell is a trap
                 color_grid[i, j] = [1, 0, 0, 1]  # Red for traps
             elif info['terminated']:
                 color_grid[i, j] = [0, 1, 0, 1]  # Green for terminated states

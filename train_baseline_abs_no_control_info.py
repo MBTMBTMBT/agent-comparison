@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     # repeat the trained envs, this may help increase randomization
     rep = 2
-    _train_env_configurations = rooms_31_train
+    _train_env_configurations = trap_31_train
     train_env_configurations = []
     for _ in range(rep):
         train_env_configurations += _train_env_configurations
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     env = DummyVecEnv(env_fns)
 
     # dir names
-    base_name = "rooms-simple-gridworld-ppo-abs-no-control-info"
+    base_name = "trap-31-simple-gridworld-ppo-abs-no-control-info"
     save_dir = "saved-models"
 
     # Create the save directory if it doesn't exist
@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     # get callbacks
     test_and_log_callback = TestAndLogCallback(
-        rooms_31_test,
+        trap_31_test,
         base_name+"-log",
         n_eval_episodes=16,
         eval_freq=10000,
