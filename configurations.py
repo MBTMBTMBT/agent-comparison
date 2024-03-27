@@ -574,3 +574,31 @@ trap_31_test = [
         "do_abs": False,
     },
 ]
+
+maze13_sampling = [
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-maze-13.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": None,
+        "goal_position": None,
+        "num_random_traps": 5,
+        "make_random": True,
+        "max_steps": 4096,
+        "num_clusters": 48,
+    },
+    # {
+    #     "env_type": "SimpleGridworld",
+    #     "env_file": "envs/simple_grid/gridworld-maze-traps-13.txt",
+    #     "cell_size": None,
+    #     "obs_size": None,
+    #     "agent_position": None,
+    #     "goal_position": None,
+    #     "num_random_traps": 5,
+    #     "make_random": True,
+    #     "max_steps": 2048,
+    #     "num_clusters": 48,
+    #     "do_abs": True,
+    # },
+]
