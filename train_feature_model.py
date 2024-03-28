@@ -1,3 +1,6 @@
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 if __name__ == '__main__':
     import torch
     from configurations import maze13_sampling
@@ -11,6 +14,7 @@ if __name__ == '__main__':
     MAX_SAMPLE_STEP = 4096
     BATCH_SIZE = 32
     LR = 1e-4
+    EPOCHS = 100
 
     session_name = "saved-models"
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -36,6 +40,9 @@ if __name__ == '__main__':
     from env_sampler import TransitionBuffer, RandomSampler
     from utils import make_env
 
+    progress_bar = tqdm(EPOCHS, desc=f'Training Epoch {counter}')
+    for i, batch in enumerate(progress_bar):
+
     sampler = RandomSampler()
     envs = [make_env(config) for config in CONFIGS]
     while len(sampler.transition_pairs) < SAMPLE_SIZE:
@@ -43,3 +50,16 @@ if __name__ == '__main__':
             sampler.sample(env, MAX_SAMPLE_STEP)
 
     transition_buffer = TransitionBuffer(sampler.transition_pairs)
+    dataloader = DataLoader(transition_buffer, batch_size=BATCH_SIZE, shuffle=True)
+    for x0, a, x1 in dataloader:
+        x0 = x0.to(device)
+        a = a.to(device)
+        x1 = x1.to(device)
+        model.train_batch(x0, x1, a)
+
+    encoder = model.phi
+    for env_path, env in zip(CONFIGS, envs):
+        env_name = env_path.split('/')[-1].split('.')[0]
+
+    model.save(f"{session_name}/model_epoch_{counter}.pth", counter, performance)
+    counter += 1

@@ -29,6 +29,7 @@ class FlexibleImageEncoder(torch.nn.Module):
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
+        x = torch.tanh(x)
         return x
 
 
@@ -150,19 +151,19 @@ class FeatureNet(torch.nn.Module):
         # a_logits = self.inv_model(z0, z1)
         # return torch.argmax(a_logits, dim=-1)
 
-    def compute_loss(self, z0, z1, a, d):
+    def compute_loss(self, z0, z1, a):
         loss = 0
         loss += 1.0 * self.inverse_loss(z0, z1, a)
         loss += 1.0 * self.ratio_loss(z0, z1)
         return loss
 
-    def train_batch(self, x0, x1, a, d):
+    def train_batch(self, x0, x1, a):
         self.train()
         self.optimizer.zero_grad()
         z0 = self.phi(x0)
         z1 = self.phi(x1)
         # z1_hat = self.fwd_model(z0, a)
-        loss = self.compute_loss(z0, z1, a, d)
+        loss = self.compute_loss(z0, z1, a)
         loss.backward()
         self.optimizer.step()
         return loss
