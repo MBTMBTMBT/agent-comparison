@@ -192,6 +192,19 @@ def make_abs_env(
     return env
 
 
+# def load_model(model, optimizer, path="model.pth", cpu_only=False):
+#     if cpu_only:
+#         checkpoint = torch.load(path, map_location=torch.device('cpu'))
+#     else:
+#         checkpoint = torch.load(path)
+#     model.load_state_dict(checkpoint['model_state_dict'])
+#     if optimizer is not None:
+#         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+#     epoch = checkpoint['epoch']
+#     best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+#     return model, optimizer, epoch, best_val_loss
+
+
 def save_model(model, iteration, base_name="simple-gridworld-ppo", save_dir="saved-models"):
     """Save the model with a custom base name, iteration number, and directory."""
     model_path = os.path.join(save_dir, f"{base_name}-{iteration}.zip")

@@ -90,31 +90,33 @@ class FeatureNet(torch.nn.Module):
             n_hidden_layers=1,
             n_units_per_layer=32,
             lr=0.001,
+            device=torch.device('cpu')
     ):
         super().__init__()
         self.n_actions = n_actions
         self.n_latent_dims = n_latent_dims
         self.lr = lr
+        self.device = device
 
         self.phi = FlexibleImageEncoder(
             input_channels=3,
             output_size=n_latent_dims,
-        )
+        ).to(device)
         self.inv_model = InvNet(
             n_actions=n_actions,
             n_latent_dims=n_latent_dims,
             n_units_per_layer=n_units_per_layer,
             n_hidden_layers=n_hidden_layers,
-        )
+        ).to(device)
         self.discriminator = ContrastiveNet(
             n_latent_dims=n_latent_dims,
             n_hidden_layers=1,
             n_units_per_layer=n_units_per_layer,
-        )
+        ).to(device)
 
-        self.cross_entropy = torch.nn.CrossEntropyLoss()
-        self.bce_loss = torch.nn.BCELoss()
-        self.mse = torch.nn.MSELoss()
+        self.cross_entropy = torch.nn.CrossEntropyLoss().to(device)
+        self.bce_loss = torch.nn.BCELoss().to(device)
+        self.mse = torch.nn.MSELoss().to(device)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
 
     def inverse_loss(self, z0, z1, a):
@@ -164,3 +166,24 @@ class FeatureNet(torch.nn.Module):
         loss.backward()
         self.optimizer.step()
         return loss
+
+    def save(self, checkpoint_path, counter=-1, performance=0.0):
+        torch.save(
+            {
+                'counter': counter,
+                'phi': self.phi.state_dict(),
+                'inv_model': self.inv_model.state_dict(),
+                'discriminator': self.discriminator.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
+                'performance': performance,
+            },
+            checkpoint_path,
+        )
+
+    def load(self, checkpoint_path):
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        self.phi.load_state_dict(checkpoint['phi'])
+        self.inv_model.load_state_dict(checkpoint['inv_model'])
+        self.discriminator.load_state_dict(checkpoint['discriminator'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
+        return checkpoint['counter'], checkpoint['performance']
