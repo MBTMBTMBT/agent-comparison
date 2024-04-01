@@ -26,7 +26,7 @@ class FlexibleImageEncoder(torch.nn.Module):
             torch.nn.Linear(64, 128),
             torch.nn.LeakyReLU(inplace=True),
             torch.nn.Linear(128, 128),
-            torch.nn.LeakyReLU(inplace=True),
+            torch.nn.Tanh(inplace=True),
             torch.nn.Linear(128, output_size),
         )
 
@@ -35,7 +35,7 @@ class FlexibleImageEncoder(torch.nn.Module):
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
-        x = torch.tanh(x)
+        # x = torch.tanh(x)
         return x
 
 
