@@ -164,10 +164,11 @@ class FeatureNet(torch.nn.Module):
         self.optimizer.step()
         return loss
 
-    def save(self, checkpoint_path, counter=-1, performance=0.0):
+    def save(self, checkpoint_path, counter=-1, _counter=-1, performance=0.0):
         torch.save(
             {
                 'counter': counter,
+                '_counter': _counter,
                 'phi': self.phi.state_dict(),
                 'inv_model': self.inv_model.state_dict(),
                 'discriminator': self.discriminator.state_dict(),
@@ -183,4 +184,4 @@ class FeatureNet(torch.nn.Module):
         self.inv_model.load_state_dict(checkpoint['inv_model'])
         self.discriminator.load_state_dict(checkpoint['discriminator'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
-        return checkpoint['counter'], checkpoint['performance']
+        return checkpoint['counter'], checkpoint['_counter'], checkpoint['performance']
