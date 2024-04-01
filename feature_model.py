@@ -121,14 +121,10 @@ class FeatureNet(torch.nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
 
     def inverse_loss(self, z0, z1, a):
-        if self.coefs['L_inv'] == 0.0:
-            return torch.tensor(0.0)
         a_hat = self.inv_model(z0, z1)
         return self.cross_entropy(input=a_hat, target=a)
 
     def ratio_loss(self, z0, z1):
-        if self.coefs['L_rat'] == 0.0:
-            return torch.tensor(0.0)
         N = len(z0)
         # shuffle next states
         idx = torch.randperm(N)
@@ -137,7 +133,7 @@ class FeatureNet(torch.nn.Module):
         # concatenate positive and negative examples
         z0_extended = torch.cat([z0, z0], dim=0)
         z1_pos_neg = torch.cat([z1, z1_neg], dim=0)
-        is_fake = torch.cat([torch.zeros(N), torch.ones(N)], dim=0)
+        is_fake = torch.cat([torch.zeros(N), torch.ones(N)], dim=0).to(self.device)
 
         # Compute which ones are fakes
         fakes = self.discriminator(z0_extended, z1_pos_neg)
