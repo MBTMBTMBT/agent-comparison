@@ -7,21 +7,21 @@ from simple_gridworld import SimpleGridWorld
 
 if __name__ == '__main__':
     import torch
-    from configurations import maze13_sampling
+    from configurations import maze13_sampling, mix_sampling
     from feature_model import FeatureNet
 
-    CONFIGS = maze13_sampling
-    NUM_ACTIONS = 4
+    CONFIGS = mix_sampling
+    NUM_ACTIONS = 2
     LATENT_DIMS = 2
 
-    SAMPLE_SIZE = 10240
+    SAMPLE_SIZE = 16384
     SAMPLE_REPLAY_TIME = 4
     MAX_SAMPLE_STEP = 4096
     BATCH_SIZE = 64
     LR = 1e-4
     EPOCHS = 500
-    SAVE_FREQ = 10
-    TEST_FREQ = 10
+    SAVE_FREQ = 5
+    TEST_FREQ = 5
 
     session_name = "learn_feature"
     device = "cuda" if torch.cuda.is_available() else "cpu"
