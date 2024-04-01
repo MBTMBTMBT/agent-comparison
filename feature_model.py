@@ -28,8 +28,9 @@ class FlexibleImageEncoder(torch.nn.Module):
         x = self.feature_extractor(x)
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
-        x = self.fc(x)
         x = torch.tanh(x)
+        x = self.fc(x)
+        # x = torch.tanh(x)
         return x
 
 
