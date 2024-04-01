@@ -22,15 +22,20 @@ class FlexibleImageEncoder(torch.nn.Module):
         super(FlexibleImageEncoder, self).__init__()
         self.feature_extractor = SimpleCNN(input_channels)
         self.adapt_pool = torch.nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = torch.nn.Linear(64, output_size)
+        self.fc = torch.nn.Sequential(
+            torch.nn.Linear(64, 128),
+            torch.nn.LeakyReLU(inplace=True),
+            torch.nn.Linear(128, 128),
+            torch.nn.LeakyReLU(inplace=True),
+            torch.nn.Linear(128, output_size),
+        )
 
     def forward(self, x):
         x = self.feature_extractor(x)
         x = self.adapt_pool(x)
         x = torch.flatten(x, 1)
-        x = torch.tanh(x)
         x = self.fc(x)
-        # x = torch.tanh(x)
+        x = torch.tanh(x)
         return x
 
 
