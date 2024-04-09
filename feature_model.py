@@ -41,7 +41,7 @@ class FlexibleImageEncoder(torch.nn.Module):
 
 
 class FlexibleImageDecoder(torch.nn.Module):
-    def __init__(self, n_latent_dims, img_channels, img_size, initial_scale_factor=4, num_hidden_channels=128):
+    def __init__(self, n_latent_dims, img_channels, img_size, initial_scale_factor=2, num_hidden_channels=128):
         """
         Initializes the flexible generator model with customizable parameters for image generation.
 
@@ -56,9 +56,15 @@ class FlexibleImageDecoder(torch.nn.Module):
         self.init_height = img_size[0] // initial_scale_factor
         self.init_width = img_size[1] // initial_scale_factor
 
-        # Adjusted linear layer to account for potentially non-square initial sizes
-        self.l1 = torch.nn.Sequential(
-            torch.nn.Linear(n_latent_dims, num_hidden_channels * self.init_height * self.init_width))
+        # Expanded fully connected layers for increased complexity
+        self.fc_layers = torch.nn.Sequential(
+            torch.nn.Linear(n_latent_dims, 512),  # First FC layer
+            torch.nn.LeakyReLU(inplace=True),
+            torch.nn.Linear(512, 512),  # Second FC layer
+            torch.nn.LeakyReLU(inplace=True),
+            torch.nn.Linear(512, num_hidden_channels * self.init_height * self.init_width)
+            # Output layer to match the size for convolutions
+        )
 
         # Dynamically create the upsampling layers based on initial_scale_factor
         layers = []
@@ -150,6 +156,7 @@ class FeatureNet(torch.nn.Module):
             n_units_per_layer=32,
             lr=0.001,
             img_size=(128, 128),
+            initial_scale_factor=2,
             device=torch.device('cpu')
     ):
         super().__init__()
@@ -176,8 +183,8 @@ class FeatureNet(torch.nn.Module):
         self.decoder = FlexibleImageDecoder(
             n_latent_dims=n_latent_dims, 
             img_channels=3, 
-            img_size = img_size, 
-            initial_scale_factor=4, 
+            img_size=img_size,
+            initial_scale_factor=initial_scale_factor,
             num_hidden_channels=128
         )
 
@@ -204,10 +211,15 @@ class FeatureNet(torch.nn.Module):
         # Compute which ones are fakes
         fakes = self.discriminator(z0_extended, z1_pos_neg)
         return self.bce_loss(input=fakes, target=is_fake.float())
-    
+
     def pixel_loss(self, x, z):
         self.decoder.train()
         fake_x = self.decoder(z)
+
+        # Check if x needs to be resized to match fake_x's size
+        if x.size() != fake_x.size():
+            x = torch.nn.functional.interpolate(x, size=fake_x.size()[2:], mode='bilinear', align_corners=False)
+
         return self.mse(fake_x, x)
 
     def forward(self, *args, **kwargs):
@@ -222,8 +234,8 @@ class FeatureNet(torch.nn.Module):
         loss = 0
         loss += 1.0 * self.inverse_loss(z0, z1, a)
         loss += 1.0 * self.ratio_loss(z0, z1)
-        loss += 1.0 * 0.5 * self.pixel_loss(x0, z0)
-        loss += 1.0 * 0.5 * self.pixel_loss(x1, z1)
+        loss += 0.1 * 0.5 * self.pixel_loss(x0, z0)
+        loss += 0.1 * 0.5 * self.pixel_loss(x1, z1)
         return loss
 
     def train_batch(self, x0, x1, a):
