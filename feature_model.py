@@ -38,6 +38,49 @@ class FlexibleImageEncoder(torch.nn.Module):
         x = self.fc(x)
         # x = torch.tanh(x)
         return x
+    
+
+class FlexibleImageDecoder(torch.nn.Module):
+    def __init__(self, n_latent_dims, img_channels, img_size, initial_scale_factor=4, num_hidden_channels=128):
+        """
+        Initializes the flexible generator model with customizable parameters for image generation.
+        
+        :param n_latent_dims: Dimension of the latent space (input vector), which determines the complexity of the input feature representation.
+        :param img_channels: Number of channels in the output image (e.g., 3 for RGB images), defining the color space of the generated image.
+        :param img_size: Size of one side of the square output image, setting the spatial dimensions of the generated image.
+        :param initial_scale_factor: Factor to determine the initial tensor size before upsampling, affecting the number of upsampling stages.
+        :param num_hidden_channels: Number of channels in the hidden layers, allowing for control over the model's capacity and the complexity of features it can learn.
+        """
+        super(FlexibleImageDecoder, self).__init__()
+        self.init_size = img_size // initial_scale_factor  # Initial tensor size before upsampling
+
+        self.l1 = torch.nn.Sequential(torch.nn.Linear(n_latent_dims, 128 * self.init_size ** 2))
+
+        # Dynamically create the upsampling layers based on initial_scale_factor
+        layers = []
+        while initial_scale_factor > 1:
+            layers += [
+                torch.nn.Upsample(scale_factor=2),
+                torch.nn.Conv2d(num_hidden_channels, 64 if initial_scale_factor == 2 else 128, kernel_size=3, stride=1, padding=1),
+                torch.nn.BatchNorm2d(64 if initial_scale_factor == 2 else 128),
+                torch.nn.LeakyReLU(0.2, inplace=True)
+            ]
+            num_hidden_channels = 64 if initial_scale_factor == 2 else 128
+            initial_scale_factor //= 2
+
+        # Final layer to produce the output image
+        layers += [
+            torch.nn.Conv2d(64, img_channels, kernel_size=3, stride=1, padding=1),
+            torch.nn.Tanh()  # Normalize the output to [-1, 1]
+        ]
+
+        self.conv_blocks = torch.nn.Sequential(*layers)
+
+    def forward(self, z):
+        out = self.l1(z)
+        out = out.view(-1, 128, self.init_size, self.init_size)
+        img = self.conv_blocks(out)
+        return img
 
 
 class InvNet(torch.nn.Module):
@@ -98,6 +141,7 @@ class FeatureNet(torch.nn.Module):
             n_hidden_layers=1,
             n_units_per_layer=32,
             lr=0.001,
+            img_size=(128, 128),
             device=torch.device('cpu')
     ):
         super().__init__()
@@ -121,6 +165,13 @@ class FeatureNet(torch.nn.Module):
             n_hidden_layers=1,
             n_units_per_layer=n_units_per_layer,
         ).to(device)
+        self.decoder = FlexibleImageDecoder(
+            n_latent_dims=n_latent_dims, 
+            img_channels=3, 
+            img_size = img_size, 
+            initial_scale_factor=4, 
+            num_hidden_channels=128
+        )
 
         self.cross_entropy = torch.nn.CrossEntropyLoss().to(device)
         self.bce_loss = torch.nn.BCELoss().to(device)
@@ -145,6 +196,11 @@ class FeatureNet(torch.nn.Module):
         # Compute which ones are fakes
         fakes = self.discriminator(z0_extended, z1_pos_neg)
         return self.bce_loss(input=fakes, target=is_fake.float())
+    
+    def pixel_loss(self, x, z):
+        self.decoder.train()
+        fake_x = self.decoder(x)
+        return self.mse(fake_x, z)
 
     def forward(self, *args, **kwargs):
         raise NotImplementedError
@@ -154,19 +210,22 @@ class FeatureNet(torch.nn.Module):
         # a_logits = self.inv_model(z0, z1)
         # return torch.argmax(a_logits, dim=-1)
 
-    def compute_loss(self, z0, z1, a):
+    def compute_loss(self, x0, x1, z0, z1, a):
         loss = 0
         loss += 1.0 * self.inverse_loss(z0, z1, a)
         loss += 1.0 * self.ratio_loss(z0, z1)
+        loss += 1.0 * 0.5 * self.pixel_loss(x0, z0)
+        loss += 1.0 * 0.5 * self.pixel_loss(x1, z1)
         return loss
 
     def train_batch(self, x0, x1, a):
         self.train()
+        self.phi.train()
         self.optimizer.zero_grad()
         z0 = self.phi(x0)
         z1 = self.phi(x1)
         # z1_hat = self.fwd_model(z0, a)
-        loss = self.compute_loss(z0, z1, a)
+        loss = self.compute_loss(x0, x1, z0, z1, a)
         loss.backward()
         self.optimizer.step()
         return loss

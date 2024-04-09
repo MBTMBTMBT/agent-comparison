@@ -2,8 +2,7 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-
-from simple_gridworld import SimpleGridWorld
+import math
 
 if __name__ == '__main__':
     import torch
@@ -13,6 +12,9 @@ if __name__ == '__main__':
     CONFIGS = mix_sampling
     NUM_ACTIONS = 4
     LATENT_DIMS = 3
+    OBS_SIZE = (128, 128)
+    for config in CONFIGS:
+            assert config["obs_size"] == OBS_SIZE  # regeneration size must match.
 
     SAMPLE_SIZE = 16384
     SAMPLE_REPLAY_TIME = 4
@@ -25,7 +27,7 @@ if __name__ == '__main__':
 
     session_name = "learn_feature_3d"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, device=device).to(device)
+    model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=OBS_SIZE, device=device).to(device)
 
     from utils import find_latest_checkpoint
     import os
@@ -74,6 +76,9 @@ if __name__ == '__main__':
 
         if counter % TEST_FREQ == 0:
             encoder = model.phi
+            encoder.eval()
+            decoder = model.decoder
+            decoder.eval()
             for config, env in zip(CONFIGS, envs):
                 env_path = config['env_file']
                 env_name = env_path.split('/')[-1].split('.')[0]
@@ -81,14 +86,45 @@ if __name__ == '__main__':
                 env.iter_reset()
                 # Store z vectors from all iterations
                 z_vectors = []
+                fake_x_vectors = []
                 for observation, terminated, position, connections, reward in env:
                     if observation is not None:
                         observation = torch.unsqueeze(observation, dim=0).to(device)
                         with torch.no_grad():
-                            z = encoder(observation).detach().cpu().numpy()
+                            z = encoder(observation)
+                            fake_x = encoder(z)
+                            z = z.detach().cpu().numpy()
+                            fake_x = fake_x.detach().cpu().numpy()
                             z_vectors.append(z.squeeze(0))
+                            fake_x_vectors.append(fake_x.squeeze(0))
 
-                # After collecting all z vectors, plot them based on LATENT_DIMS
+                # plot reconstructed xs:
+                # cannot be used if not using any reconstruction!!!
+                plt.figure()
+                num_xs = len(fake_x_vectors)
+                grid_size = math.ceil(math.sqrt(num_xs))  # Calculate grid size that's as square as possible
+                # Create a figure to hold the grid
+                fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+                # Flatten axes array for easier indexing
+                axes = axes.ravel()
+                for i, img in enumerate(num_xs):
+                    # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+                    img_transposed = img.transpose((1, 2, 0))
+                    # Plot the image in its subplot
+                    axes[i].imshow(img_transposed)
+                    axes[i].axis('off')  # Hide the axis
+                # Hide any unused subplots if the number of images is not a perfect square
+                for j in range(i + 1, grid_size ** 2):
+                    axes[j].axis('off')
+                plt.tight_layout()
+                img_save_dir = os.path.join(session_name, "saved_decoded_images")
+                if not os.path.isdir(img_save_dir):
+                        os.makedirs(img_save_dir)
+                save_path = os.path.join(img_save_dir, f"{env_name}_latent{LATENT_DIMS}_{counter}.png")
+                plt.savefig(save_path, dpi=100, bbox_inches='tight')
+                plt.close(fig)
+
+                # plot z vectors based on LATENT_DIMS
                 if LATENT_DIMS == 2:
                     plt.figure(figsize=(8, 8))
                     for z in z_vectors:
