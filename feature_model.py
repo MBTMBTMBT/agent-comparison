@@ -77,7 +77,8 @@ class FlexibleImageDecoder(torch.nn.Module):
         # Final layer to produce the output image
         layers += [
             torch.nn.Conv2d(64, img_channels, kernel_size=3, stride=1, padding=1),
-            torch.nn.Tanh()  # Normalize the output to [-1, 1]
+            # torch.nn.Tanh()
+            torch.nn.ReLU()
         ]
 
         self.conv_blocks = torch.nn.Sequential(*layers)
