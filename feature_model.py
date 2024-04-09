@@ -90,7 +90,7 @@ class FlexibleImageDecoder(torch.nn.Module):
         self.conv_blocks = torch.nn.Sequential(*layers)
 
     def forward(self, z):
-        out = self.l1(z)
+        out = self.fc_layers(z)
         # Adjusted view operation for potentially non-square initial sizes
         out = out.view(-1, 128, self.init_height, self.init_width)
         img = self.conv_blocks(out)
