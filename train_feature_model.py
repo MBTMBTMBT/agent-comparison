@@ -17,15 +17,15 @@ if __name__ == '__main__':
             assert config["obs_size"] == OBS_SIZE  # regeneration size must match.
 
     SAMPLE_SIZE = 16384
-    SAMPLE_REPLAY_TIME = 4
+    SAMPLE_REPLAY_TIME = 1
     MAX_SAMPLE_STEP = 4096
     BATCH_SIZE = 64
     LR = 1e-4
-    EPOCHS = 1000
+    EPOCHS = 8000
     SAVE_FREQ = 5
     TEST_FREQ = 5
 
-    session_name = "learn_feature_3d"
+    session_name = "learn_feature_3d_reconstruct"
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=OBS_SIZE, device=device).to(device)
 
@@ -92,7 +92,7 @@ if __name__ == '__main__':
                         observation = torch.unsqueeze(observation, dim=0).to(device)
                         with torch.no_grad():
                             z = encoder(observation)
-                            fake_x = encoder(z)
+                            fake_x = decoder(z)
                             z = z.detach().cpu().numpy()
                             fake_x = fake_x.detach().cpu().numpy()
                             z_vectors.append(z.squeeze(0))
@@ -107,7 +107,7 @@ if __name__ == '__main__':
                 fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
                 # Flatten axes array for easier indexing
                 axes = axes.ravel()
-                for i, img in enumerate(num_xs):
+                for i, img in enumerate(fake_x_vectors):
                     # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
                     img_transposed = img.transpose((1, 2, 0))
                     # Plot the image in its subplot
@@ -156,7 +156,7 @@ if __name__ == '__main__':
                         save_path = os.path.join(img_save_dir,
                                                  f"{env_name}_latent{LATENT_DIMS}_{counter}_view{i}.png")
                         plt.savefig(save_path)
-                        print(f"Saved plot to {save_path}")
+                        # print(f"Saved plot to {save_path}")
 
                     plt.close(fig)  # Close the plot figure after saving all views
 

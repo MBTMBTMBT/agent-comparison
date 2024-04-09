@@ -38,35 +38,41 @@ class FlexibleImageEncoder(torch.nn.Module):
         x = self.fc(x)
         # x = torch.tanh(x)
         return x
-    
+
 
 class FlexibleImageDecoder(torch.nn.Module):
     def __init__(self, n_latent_dims, img_channels, img_size, initial_scale_factor=4, num_hidden_channels=128):
         """
         Initializes the flexible generator model with customizable parameters for image generation.
-        
+
         :param n_latent_dims: Dimension of the latent space (input vector), which determines the complexity of the input feature representation.
         :param img_channels: Number of channels in the output image (e.g., 3 for RGB images), defining the color space of the generated image.
-        :param img_size: Size of one side of the square output image, setting the spatial dimensions of the generated image.
+        :param img_size: Tuple of two ints for the size of the output image, setting the spatial dimensions of the generated image.
         :param initial_scale_factor: Factor to determine the initial tensor size before upsampling, affecting the number of upsampling stages.
         :param num_hidden_channels: Number of channels in the hidden layers, allowing for control over the model's capacity and the complexity of features it can learn.
         """
         super(FlexibleImageDecoder, self).__init__()
-        self.init_size = img_size // initial_scale_factor  # Initial tensor size before upsampling
+        # Adjust for img_size being a tuple (height, width)
+        self.init_height = img_size[0] // initial_scale_factor
+        self.init_width = img_size[1] // initial_scale_factor
 
-        self.l1 = torch.nn.Sequential(torch.nn.Linear(n_latent_dims, 128 * self.init_size ** 2))
+        # Adjusted linear layer to account for potentially non-square initial sizes
+        self.l1 = torch.nn.Sequential(
+            torch.nn.Linear(n_latent_dims, num_hidden_channels * self.init_height * self.init_width))
 
         # Dynamically create the upsampling layers based on initial_scale_factor
         layers = []
-        while initial_scale_factor > 1:
+        current_scale_factor = initial_scale_factor
+        while current_scale_factor > 1:
             layers += [
                 torch.nn.Upsample(scale_factor=2),
-                torch.nn.Conv2d(num_hidden_channels, 64 if initial_scale_factor == 2 else 128, kernel_size=3, stride=1, padding=1),
-                torch.nn.BatchNorm2d(64 if initial_scale_factor == 2 else 128),
+                torch.nn.Conv2d(num_hidden_channels, 64 if current_scale_factor == 2 else num_hidden_channels,
+                                kernel_size=3, stride=1, padding=1),
+                torch.nn.BatchNorm2d(64 if current_scale_factor == 2 else num_hidden_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True)
             ]
-            num_hidden_channels = 64 if initial_scale_factor == 2 else 128
-            initial_scale_factor //= 2
+            num_hidden_channels = 64 if current_scale_factor == 2 else num_hidden_channels
+            current_scale_factor //= 2
 
         # Final layer to produce the output image
         layers += [
@@ -78,7 +84,8 @@ class FlexibleImageDecoder(torch.nn.Module):
 
     def forward(self, z):
         out = self.l1(z)
-        out = out.view(-1, 128, self.init_size, self.init_size)
+        # Adjusted view operation for potentially non-square initial sizes
+        out = out.view(-1, 128, self.init_height, self.init_width)
         img = self.conv_blocks(out)
         return img
 
@@ -199,8 +206,8 @@ class FeatureNet(torch.nn.Module):
     
     def pixel_loss(self, x, z):
         self.decoder.train()
-        fake_x = self.decoder(x)
-        return self.mse(fake_x, z)
+        fake_x = self.decoder(z)
+        return self.mse(fake_x, x)
 
     def forward(self, *args, **kwargs):
         raise NotImplementedError
