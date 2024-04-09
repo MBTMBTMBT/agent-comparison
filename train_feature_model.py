@@ -1,3 +1,4 @@
+import numpy as np
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -110,8 +111,9 @@ if __name__ == '__main__':
                 for i, img in enumerate(fake_x_vectors):
                     # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
                     img_transposed = img.transpose((1, 2, 0))
+                    image_clipped = np.clip(img_transposed, 0, 1)
                     # Plot the image in its subplot
-                    axes[i].imshow(img_transposed)
+                    axes[i].imshow(image_clipped)
                     axes[i].axis('off')  # Hide the axis
                 # Hide any unused subplots if the number of images is not a perfect square
                 for j in range(i + 1, grid_size ** 2):
