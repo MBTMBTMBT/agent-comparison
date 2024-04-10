@@ -32,7 +32,7 @@ if __name__ == '__main__':
     # sampler configs
     SAMPLE_SIZE = 16384
     SAMPLE_REPLAY_TIME = 1
-    MAX_SAMPLE_STEP = SAMPLE_SIZE
+    MAX_SAMPLE_STEP = SAMPLE_SIZE // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME
     VEC_ENV_REPEAT_TIME = 1
 
     # train hyperparams
@@ -49,11 +49,11 @@ if __name__ == '__main__':
     SAVE_FREQ = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 1
 
     EPOCHS = 1000
-    NUM_STEPS_PER_EPOCH = MAX_SAMPLE_STEP * 4
+    NUM_STEPS_PER_EPOCH = MAX_SAMPLE_STEP * len(TRAIN_CONFIGS) * SAMPLE_REPLAY_TIME * 4
 
     # eval configs
     NUM_EVAL_EPISODES = 16
-    EVAL_FREQ = MAX_SAMPLE_STEP * 1
+    EVAL_FREQ = NUM_STEPS_PER_EPOCH // 4
 
     session_name = "ppo_feature_extractor"
     feature_model_name = 'feature_model_step'
@@ -171,7 +171,7 @@ if __name__ == '__main__':
             start_num_steps=agent_step_counter,
             deterministic=False,
             render=False,
-            verbose=0,
+            verbose=1,
         )
 
         model.learn(
