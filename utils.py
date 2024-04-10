@@ -309,27 +309,27 @@ def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.n
                 fake_x_imgs.append(fake_x.squeeze(0))
                 real_x = observation.detach().cpu().numpy()
                 real_x_imgs.append(real_x.squeeze(0))
-            # plot reconstructed xs:
-            plt.figure()
-            num_xs = len(fake_x_imgs)
-            grid_size = math.ceil(math.sqrt(num_xs))  # Calculate grid size that's as square as possible
-            # Create a figure to hold the grid
-            fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
-            # Flatten axes array for easier indexing
-            axes = axes.ravel()
-            for i, img in enumerate(fake_x_imgs):
-                # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
-                img_transposed = img.transpose((1, 2, 0))
-                image_clipped = np.clip(img_transposed, 0, 1)
-                # Plot the image in its subplot
-                axes[i].imshow(image_clipped)
-                axes[i].axis('off')  # Hide the axis
-                # Hide any unused subplots if the number of images is not a perfect square
-                for j in range(i + 1, grid_size ** 2):
-                    axes[j].axis('off')
-            plt.tight_layout()
-            plt.savefig(save_path, dpi=100, bbox_inches='tight')
-            plt.close(fig)
+    # plot reconstructed xs:
+    plt.figure()
+    num_xs = len(fake_x_imgs)
+    grid_size = math.ceil(math.sqrt(num_xs))  # Calculate grid size that's as square as possible
+    # Create a figure to hold the grid
+    fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+    # Flatten axes array for easier indexing
+    axes = axes.ravel()
+    for i, img in enumerate(fake_x_imgs):
+        # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+        img_transposed = img.transpose((1, 2, 0))
+        image_clipped = np.clip(img_transposed, 0, 1)
+        # Plot the image in its subplot
+        axes[i].imshow(image_clipped)
+        axes[i].axis('off')  # Hide the axis
+        # Hide any unused subplots if the number of images is not a perfect square
+        for j in range(i + 1, grid_size ** 2):
+            axes[j].axis('off')
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=100, bbox_inches='tight')
+    plt.close(fig)
 
 
 def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, num_dims: int,
@@ -535,15 +535,16 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         self.counter = counter
         # self.show_progress_bar = show_progress_bar
 
-        self.model_updated_flag = False  # to know when to save the model
-        self.do_plot = False
+        # self.model_updated_flag = False  # to know when to save the model
+        self.do_plot = plot_dir is not None
         self.verbose = verbose
 
     def _on_step(self) -> bool:
         # check if buffer is filled
-        if self.buffer_size_to_train < self.buffer_size_to_train:
+        if self.get_buffer_size() < self.buffer_size_to_train:
             return True
 
+        print('Training Feature extractor ...')
         self.feature_extractor_full_model.to(self.device)
         transition_buffer = self.get_buffer_obj()
         dataloader = DataLoader(transition_buffer, batch_size=self.batch_size, shuffle=True)
@@ -564,18 +565,22 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                     print(
                         f"Updated feature extractor at step {self.counter}, loss {loss_val:.3f}, inv loss: {inv_loss_val:.3f}, ratio loss: {ratio_loss_val:.3f}, pixel loss: {pixel_loss_val:.3f}")
 
+        # empty sampler buffers:
+        self.empty_sampler_buffers()
+        # self.model_updated_flag = True
+
         if self.do_plot and self.plot_dir is not None:
-            for config, env in zip(self.env_configs, self.model.env.envs):
+            for config, wrapper in zip(self.env_configs, self.model.env.envs):
                 env_path = config['env_file']
                 env_name = env_path.split('/')[-1].split('.')[0]
                 if not os.path.isdir(self.plot_dir):
                     os.makedirs(self.plot_dir)
                 save_path = os.path.join(self.plot_dir, f"{env_name}_original_{self.counter}.png")
-                plot_decoded_images(env, self.feature_extractor_full_model.phi,
+                plot_decoded_images(wrapper.env, self.feature_extractor_full_model.phi,
                                     self.feature_extractor_full_model.decoder, save_path, self.device)
         return True
 
-    def get_sampler_size(self):
+    def get_buffer_size(self):
         total_size = 0
         for sampler_wrapper in self.model.env.envs:
             total_size += len(sampler_wrapper.transition_pairs)
