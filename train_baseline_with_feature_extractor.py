@@ -52,7 +52,7 @@ if __name__ == '__main__':
     NUM_STEPS_PER_EPOCH = MAX_SAMPLE_STEP * len(TRAIN_CONFIGS) * SAMPLE_REPLAY_TIME * 20
 
     # eval configs
-    NUM_EVAL_EPISODES = 16
+    NUM_EVAL_EPISODES = 10
     EVAL_FREQ = NUM_STEPS_PER_EPOCH // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME // 5
 
     session_name = "ppo_feature_extractor"
