@@ -11,27 +11,33 @@ if __name__ == '__main__':
     from feature_model import FeatureNet
 
     CONFIGS = mix_sampling
+
+    # model configs
     NUM_ACTIONS = 4
     LATENT_DIMS = 8
-    RECONSTRUCT_SIZE = (96, 96)
+    RECONSTRUCT_SIZE = (72, 72)
     RECONSTRUCT_SCALE = 2
 
+    # sampler configs
+    SAMPLE_SIZE = 16384
+    SAMPLE_REPLAY_TIME = 4
+    MAX_SAMPLE_STEP = 4096
+
+    # train hyperparams
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
         'dec': 0.1,
     }
-
-    SAMPLE_SIZE = 16384
-    SAMPLE_REPLAY_TIME = 4
-    MAX_SAMPLE_STEP = 4096
     BATCH_SIZE = 256
     LR = 1e-4
+
+    # train configs
     EPOCHS = 8000
     SAVE_FREQ = 1
     TEST_FREQ = 5
 
-    session_name = "learn_feature_3d_reconstruct"
+    session_name = "learn_feature_reconstruct"
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=RECONSTRUCT_SIZE, initial_scale_factor=RECONSTRUCT_SCALE, device=device).to(device)
 
@@ -76,8 +82,11 @@ if __name__ == '__main__':
                 x0 = x0.to(device)
                 a = a.to(device)
                 x1 = x1.to(device)
-                loss_val = model.train_batch(x0, x1, a).detach().cpu().item()
+                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = model.train_batch(x0, x1, a)
                 tb_writer.add_scalar('loss', loss_val, _counter)
+                tb_writer.add_scalar('inv_loss', inv_loss_val, _counter)
+                tb_writer.add_scalar('ratio_loss', ratio_loss_val, _counter)
+                tb_writer.add_scalar('pixel_loss', pixel_loss_val, _counter)
                 _counter += 1
 
         if counter % TEST_FREQ == 0:
