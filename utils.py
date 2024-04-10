@@ -328,7 +328,27 @@ def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.n
         for j in range(i + 1, grid_size ** 2):
             axes[j].axis('off')
     plt.tight_layout()
-    plt.savefig(save_path, dpi=100, bbox_inches='tight')
+    plt.savefig(save_path.split('.')[-2]+'_decoded.png', dpi=100, bbox_inches='tight')
+    plt.close(fig)
+
+    # plot reconstructed xs:
+    plt.figure()
+    # Create a figure to hold the grid
+    fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+    # Flatten axes array for easier indexing
+    axes = axes.ravel()
+    for i, img in enumerate(real_x_imgs):
+        # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+        img_transposed = img.transpose((1, 2, 0))
+        image_clipped = np.clip(img_transposed, 0, 1)
+        # Plot the image in its subplot
+        axes[i].imshow(image_clipped)
+        axes[i].axis('off')  # Hide the axis
+        # Hide any unused subplots if the number of images is not a perfect square
+        for j in range(i + 1, grid_size ** 2):
+            axes[j].axis('off')
+    plt.tight_layout()
+    plt.savefig(save_path.split('.')[-2] + '_original.png', dpi=100, bbox_inches='tight')
     plt.close(fig)
 
 
@@ -576,7 +596,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                 env_name = env_path.split('/')[-1].split('.')[0]
                 if not os.path.isdir(self.plot_dir):
                     os.makedirs(self.plot_dir)
-                save_path = os.path.join(self.plot_dir, f"{env_name}_original_{self.counter}.png")
+                save_path = os.path.join(self.plot_dir, f"{env_name}{self.counter}.png")
                 plot_decoded_images(wrapper.env, self.feature_extractor_full_model.phi,
                                     self.feature_extractor_full_model.decoder, save_path, self.device)
         return True
