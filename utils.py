@@ -1,9 +1,10 @@
 import collections
-import copy
 import math
 import os
 import random
 import re
+
+import gymnasium
 import numpy as np
 import matplotlib.pyplot as plt
 import imageio
@@ -18,11 +19,12 @@ from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
 from env_sampler import TransitionBuffer
 from feature_model import FeatureNet
 from simple_gridworld import SimpleGridWorld, SimpleGridWorldWithStateAbstraction
+from typing import Type
 
 
-def find_latest_checkpoint(model_dir):
+def find_latest_checkpoint(model_dir, start_with='model_epoch_'):
     """Find the latest model checkpoint in the given directory."""
-    checkpoints = [f for f in os.listdir(model_dir) if f.startswith('model_epoch_') and f.endswith('.pth')]
+    checkpoints = [f for f in os.listdir(model_dir) if f.startswith(start_with) and f.endswith('.pth')]
     if not checkpoints:
         return None
 
@@ -121,7 +123,7 @@ def save_trajectory_as_gif(trajectory, rewards, action_dict: dict[int, str], fol
     imageio.mimsave(filepath, images_with_actions, fps=10)
 
 
-def make_env(configure: dict) -> SimpleGridWorld:
+def make_env(configure: dict, wrapper: Type[gymnasium.Wrapper] = None) -> SimpleGridWorld:
     env = None
     if configure["env_type"] == "SimpleGridworld":
         if "cell_size" in configure.keys():
@@ -166,6 +168,8 @@ def make_env(configure: dict) -> SimpleGridWorld:
             make_random=make_random,
             max_steps=max_steps
         )
+        if wrapper is not None:
+            env = wrapper(env)
     return env
 
 
@@ -210,14 +214,14 @@ def make_abs_env(
 #     return model, optimizer, epoch, best_val_loss
 
 
-def save_model(model, iteration, base_name="simple-gridworld-ppo", save_dir="saved-models"):
+def old_save_model(model, iteration, base_name="simple-gridworld-ppo", save_dir="saved-models"):
     """Save the model with a custom base name, iteration number, and directory."""
     model_path = os.path.join(save_dir, f"{base_name}-{iteration}.zip")
     model.save(model_path)
     print(f"Model saved to {model_path}")
 
 
-def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models"):
+def old_find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models"):
     """Find the most recently saved model based on iteration number and custom base name, and return its path and
     iteration number."""
     model_files = [f for f in os.listdir(save_dir) if f.startswith(base_name) and f.endswith('.zip')]
@@ -242,7 +246,47 @@ def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models")
     return os.path.join(save_dir, latest_model), latest_model_iteration
 
 
-def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, decoder: torch.nn.Module, save_path: str, device=torch.device("cpu")):
+def save_model(model, num_epoch: int, num_step: int, base_name: str, save_dir: str):
+    model_path = os.path.join(save_dir, f'{base_name}-EPOCH{num_epoch}-STEP{num_step}.zip')
+    model.save(model_path)
+    print(f"Model saved to {model_path}")
+
+
+def find_newest_model(base_name: str, save_dir: str):
+    """
+    Find the model with the same base name but the largest num_epoch.
+    Return model path, epoch, and number of steps.
+    """
+    model_files = [f for f in os.listdir(save_dir) if f.startswith(base_name) and f.endswith('.zip')]
+    if not model_files:
+        return None, -1, -1  # No model found
+
+    max_epoch = -1
+    num_steps = -1
+    model_path = None
+
+    for f in model_files:
+        parts = f.split('-')
+        try:
+            epoch_part = parts[1]  # Assuming format is always correct
+            step_part = parts[2]
+
+            epoch_num = int(epoch_part.replace('EPOCH', ''))
+            step_num = int(step_part.replace('STEP', '').split('.')[0])  # Removing '.zip' and converting to int
+
+            if epoch_num > max_epoch:
+                max_epoch = epoch_num
+                num_steps = step_num
+                model_path = os.path.join(save_dir, f)
+        except ValueError:
+            # If parsing fails, skip this file
+            continue
+
+    return model_path, max_epoch, num_steps
+
+
+def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, decoder: torch.nn.Module,
+                        save_path: str, device=torch.device("cpu")):
     encoder.to(device)
     decoder.to(device)
     encoder.eval()
@@ -288,7 +332,8 @@ def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.n
             plt.close(fig)
 
 
-def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, num_dims: int, save_path: str, device=torch.device("cpu")):
+def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, num_dims: int,
+                         save_path: str, device=torch.device("cpu")):
     assert num_dims == 2 or num_dims == 3
     encoder.to(device)
     encoder.eval()
@@ -331,6 +376,19 @@ def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.
         plt.close(fig)  # Close the plot figure after saving all views
 
 
+class StepCounterCallback(BaseCallback):
+    def __init__(self, verbose=0, init_counter_val=0, ):
+        super(StepCounterCallback, self).__init__(verbose)
+        self.step_count = init_counter_val
+
+    def _on_step(self) -> bool:
+        self.step_count += 1
+        # can also control training by returning False to stop
+        # for example, stop after 10,000 steps
+        # return self.step_count <= 10000
+        return True
+
+
 class TestAndLogCallback(BaseCallback):
     def __init__(
             self,
@@ -339,6 +397,7 @@ class TestAndLogCallback(BaseCallback):
             # session_name: str,
             n_eval_episodes=10,
             eval_freq=10000,
+            start_num_steps: int or None = None,
             deterministic=False,
             render=False,
             verbose=1,
@@ -356,6 +415,10 @@ class TestAndLogCallback(BaseCallback):
         # For TensorBoard logging
         self.tb_writer = None
         self.eval_timesteps = []
+
+        self.start_num_steps = self.num_timesteps
+        if start_num_steps is not None:
+            self.start_num_steps = start_num_steps
 
     def _init_callback(self) -> None:
         if self.tb_writer is None:
@@ -489,7 +552,8 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                 x0 = x0.to(self.device)
                 a = a.to(self.device)
                 x1 = x1.to(self.device)
-                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = self.feature_extractor_full_model.train_batch(x0, x1, a)
+                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = self.feature_extractor_full_model.train_batch(
+                    x0, x1, a)
                 if self.tb_writer is not None:
                     self.tb_writer.add_scalar('loss', loss_val, self.counter)
                     self.tb_writer.add_scalar('inv_loss', inv_loss_val, self.counter)
@@ -497,7 +561,8 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                     self.tb_writer.add_scalar('pixel_loss', pixel_loss_val, self.counter)
                 self.counter += 1
                 if self.verbose:
-                    print(f"Updated feature extractor at step {self.counter}, loss {loss_val:.3f}, inv loss: {inv_loss_val:.3f}, ratio loss: {ratio_loss_val:.3f}, pixel loss: {pixel_loss_val:.3f}")
+                    print(
+                        f"Updated feature extractor at step {self.counter}, loss {loss_val:.3f}, inv loss: {inv_loss_val:.3f}, ratio loss: {ratio_loss_val:.3f}, pixel loss: {pixel_loss_val:.3f}")
 
         if self.do_plot and self.plot_dir is not None:
             for config, env in zip(self.env_configs, self.model.env.envs):
@@ -506,7 +571,8 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                 if not os.path.isdir(self.plot_dir):
                     os.makedirs(self.plot_dir)
                 save_path = os.path.join(self.plot_dir, f"{env_name}_original_{self.counter}.png")
-                plot_decoded_images(env, self.feature_extractor_full_model.phi, self.feature_extractor_full_model.decoder, save_path, self.device)
+                plot_decoded_images(env, self.feature_extractor_full_model.phi,
+                                    self.feature_extractor_full_model.decoder, save_path, self.device)
         return True
 
     def get_sampler_size(self):
