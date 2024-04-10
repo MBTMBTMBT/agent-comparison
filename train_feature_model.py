@@ -13,13 +13,19 @@ if __name__ == '__main__':
     CONFIGS = mix_sampling
     NUM_ACTIONS = 4
     LATENT_DIMS = 8
-    RECONSTRUCT_SIZE = (64, 64)
+    RECONSTRUCT_SIZE = (96, 96)
     RECONSTRUCT_SCALE = 2
 
+    WEIGHTS = {
+        'inv': 1.0,
+        'dis': 1.0,
+        'dec': 0.1,
+    }
+
     SAMPLE_SIZE = 16384
-    SAMPLE_REPLAY_TIME = 1
+    SAMPLE_REPLAY_TIME = 4
     MAX_SAMPLE_STEP = 4096
-    BATCH_SIZE = 64
+    BATCH_SIZE = 256
     LR = 1e-4
     EPOCHS = 8000
     SAVE_FREQ = 1
