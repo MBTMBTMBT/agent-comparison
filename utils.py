@@ -243,6 +243,8 @@ def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models")
 
 
 def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, decoder: torch.nn.Module, save_path: str, device=torch.device("cpu")):
+    encoder.to(device)
+    decoder.to(device)
     encoder.eval()
     decoder.eval()
     # reset iterator before using it
@@ -288,6 +290,7 @@ def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.n
 
 def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, num_dims: int, save_path: str, device=torch.device("cpu")):
     assert num_dims == 2 or num_dims == 3
+    encoder.to(device)
     encoder.eval()
     z_vectors = []
     for observation, terminated, position, connections, reward in iterable_env:
@@ -478,6 +481,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         if self.buffer_size_to_train < self.buffer_size_to_train:
             return True
 
+        self.feature_extractor_full_model.to(self.device)
         transition_buffer = self.get_buffer_obj()
         dataloader = DataLoader(transition_buffer, batch_size=self.batch_size, shuffle=True)
         for _ in range(self.replay_times):
