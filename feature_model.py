@@ -41,7 +41,7 @@ class FlexibleImageEncoder(torch.nn.Module):
 
 
 class FlexibleImageDecoder(torch.nn.Module):
-    def __init__(self, n_latent_dims, img_channels, img_size, initial_scale_factor=2, num_hidden_channels=128):
+    def __init__(self, n_latent_dims, img_channels, img_size, initial_scale_factor=2, num_hidden_channels=32):
         """
         Initializes the flexible generator model with customizable parameters for image generation.
 
@@ -52,17 +52,18 @@ class FlexibleImageDecoder(torch.nn.Module):
         :param num_hidden_channels: Number of channels in the hidden layers, allowing for control over the model's capacity and the complexity of features it can learn.
         """
         super(FlexibleImageDecoder, self).__init__()
+        self.num_hidden_channels = num_hidden_channels
         # Adjust for img_size being a tuple (height, width)
         self.init_height = img_size[0] // initial_scale_factor
         self.init_width = img_size[1] // initial_scale_factor
 
         # Expanded fully connected layers for increased complexity
         self.fc_layers = torch.nn.Sequential(
-            torch.nn.Linear(n_latent_dims, 512),  # First FC layer
+            torch.nn.Linear(n_latent_dims, 128),
             torch.nn.LeakyReLU(inplace=True),
-            torch.nn.Linear(512, 512),  # Second FC layer
+            torch.nn.Linear(128, 128),
             torch.nn.LeakyReLU(inplace=True),
-            torch.nn.Linear(512, num_hidden_channels * self.init_height * self.init_width)
+            torch.nn.Linear(128, num_hidden_channels * self.init_height * self.init_width)
             # Output layer to match the size for convolutions
         )
 
@@ -72,17 +73,17 @@ class FlexibleImageDecoder(torch.nn.Module):
         while current_scale_factor > 1:
             layers += [
                 torch.nn.Upsample(scale_factor=2),
-                torch.nn.Conv2d(num_hidden_channels, 64 if current_scale_factor == 2 else num_hidden_channels,
+                torch.nn.Conv2d(num_hidden_channels, num_hidden_channels,
                                 kernel_size=3, stride=1, padding=1),
-                torch.nn.BatchNorm2d(64 if current_scale_factor == 2 else num_hidden_channels),
+                torch.nn.BatchNorm2d(num_hidden_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True)
             ]
-            num_hidden_channels = 64 if current_scale_factor == 2 else num_hidden_channels
+            # num_hidden_channels = 64 if current_scale_factor == 2 else num_hidden_channels
             current_scale_factor //= 2
 
         # Final layer to produce the output image
         layers += [
-            torch.nn.Conv2d(64, img_channels, kernel_size=3, stride=1, padding=1),
+            torch.nn.Conv2d(num_hidden_channels, img_channels, kernel_size=3, stride=1, padding=1),
             # torch.nn.Tanh()
             torch.nn.ReLU()
         ]
@@ -92,7 +93,7 @@ class FlexibleImageDecoder(torch.nn.Module):
     def forward(self, z):
         out = self.fc_layers(z)
         # Adjusted view operation for potentially non-square initial sizes
-        out = out.view(-1, 128, self.init_height, self.init_width)
+        out = out.view(-1, self.num_hidden_channels, self.init_height, self.init_width)
         img = self.conv_blocks(out)
         return img
 
@@ -185,7 +186,6 @@ class FeatureNet(torch.nn.Module):
             img_channels=3, 
             img_size=img_size,
             initial_scale_factor=initial_scale_factor,
-            num_hidden_channels=128
         )
 
         self.cross_entropy = torch.nn.CrossEntropyLoss().to(device)
