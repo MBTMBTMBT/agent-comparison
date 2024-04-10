@@ -184,7 +184,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     # Load the newest model based on the custom base name and directory
-    newest_model_path, idx = find_newest_model(base_name=base_name, save_dir=save_dir)
+    newest_model_path, idx = old_find_newest_model(base_name=base_name, save_dir=save_dir)
     if newest_model_path:
         print(f"Loading model from {newest_model_path}")
         model = PPO.load(newest_model_path, env=env, verbose=1)
@@ -194,7 +194,7 @@ if __name__ == "__main__":
 
     for i in range(idx+1, 150):
         model.learn(total_timesteps=100000, progress_bar=True)
-        save_model(model, i, base_name, save_dir)
+        old_save_model(model, i, base_name, save_dir)
 
         for config in train_env_configurations + test_env_configurations:
             test_env = make_env(config)

@@ -52,12 +52,12 @@ if __name__ == '__main__':
     # load parameters if it has any
     if latest_checkpoint:
         print(f"Loading model from {latest_checkpoint}")
-        counter, _counter, performance = model.load(latest_checkpoint)
-        counter += 1
-        _counter += 1
+        epoch_counter, step_counter, performance = model.load(latest_checkpoint)
+        epoch_counter += 1
+        step_counter += 1
     else:
-        counter = 0
-        _counter = 0
+        epoch_counter = 0
+        step_counter = 0
         performance = float('inf')
 
     # init tensorboard writer
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     from env_sampler import TransitionBuffer, RandomSampler
     from utils import make_env
 
-    progress_bar = tqdm(range(counter, EPOCHS), desc=f'Training Epoch {counter}')
+    progress_bar = tqdm(range(epoch_counter, EPOCHS), desc=f'Training Epoch {epoch_counter}')
     for i, batch in enumerate(progress_bar):
         sampler = RandomSampler()
         envs = [make_env(config) for config in CONFIGS]
@@ -83,13 +83,13 @@ if __name__ == '__main__':
                 a = a.to(device)
                 x1 = x1.to(device)
                 loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = model.train_batch(x0, x1, a)
-                tb_writer.add_scalar('loss', loss_val, _counter)
-                tb_writer.add_scalar('inv_loss', inv_loss_val, _counter)
-                tb_writer.add_scalar('ratio_loss', ratio_loss_val, _counter)
-                tb_writer.add_scalar('pixel_loss', pixel_loss_val, _counter)
-                _counter += 1
+                tb_writer.add_scalar('loss', loss_val, step_counter)
+                tb_writer.add_scalar('inv_loss', inv_loss_val, step_counter)
+                tb_writer.add_scalar('ratio_loss', ratio_loss_val, step_counter)
+                tb_writer.add_scalar('pixel_loss', pixel_loss_val, step_counter)
+                step_counter += 1
 
-        if counter % TEST_FREQ == 0:
+        if epoch_counter % TEST_FREQ == 0:
             encoder = model.phi
             encoder.eval()
             decoder = model.decoder
@@ -139,7 +139,7 @@ if __name__ == '__main__':
                 img_save_dir = os.path.join(session_name, "saved_decoded_images")
                 if not os.path.isdir(img_save_dir):
                     os.makedirs(img_save_dir)
-                save_path = os.path.join(img_save_dir, f"{env_name}_reconstructed_{counter}.png")
+                save_path = os.path.join(img_save_dir, f"{env_name}_reconstructed_{epoch_counter}.png")
                 plt.savefig(save_path, dpi=100, bbox_inches='tight')
                 plt.close(fig)
                 # save original images as well
@@ -162,7 +162,7 @@ if __name__ == '__main__':
                 img_save_dir = os.path.join(session_name, "saved_decoded_images")
                 if not os.path.isdir(img_save_dir):
                     os.makedirs(img_save_dir)
-                save_path = os.path.join(img_save_dir, f"{env_name}_original_{counter}.png")
+                save_path = os.path.join(img_save_dir, f"{env_name}_original_{epoch_counter}.png")
                 plt.savefig(save_path, dpi=100, bbox_inches='tight')
                 plt.close(fig)
 
@@ -196,14 +196,14 @@ if __name__ == '__main__':
 
                         # Save each view to a different file
                         save_path = os.path.join(img_save_dir,
-                                                 f"{env_name}_latent{LATENT_DIMS}_{counter}_view{i}.png")
+                                                 f"{env_name}_latent{LATENT_DIMS}_{epoch_counter}_view{i}.png")
                         plt.savefig(save_path)
                         # print(f"Saved plot to {save_path}")
 
                     plt.close(fig)  # Close the plot figure after saving all views
 
-        if counter % SAVE_FREQ == 0:
-            model.save(f"{session_name}/model_epoch_{counter}.pth", counter, _counter, performance)
-        counter += 1
+        if epoch_counter % SAVE_FREQ == 0:
+            model.save(f"{session_name}/model_epoch_{epoch_counter}.pth", epoch_counter, step_counter, performance)
+        epoch_counter += 1
         progress_bar.set_description(
-            f'Train Epoch {counter}: Loss: {loss_val:.2f}')
+            f'Train Epoch {epoch_counter}: Loss: {loss_val:.2f}')
