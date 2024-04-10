@@ -36,7 +36,7 @@ if __name__ == "__main__":
         verbose=1,
     )
 
-    update_env_callback = UpdateEnvCallback(
+    update_env_callback = UpdateAbsEnvCallback(
         train_env_configurations,
         num_clusters_start=20,
         num_clusters_end=20,
