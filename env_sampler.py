@@ -46,6 +46,7 @@ class RandomSampler:
 class SamplerWrapper(gym.Wrapper):
     def __init__(self, env):
         super(SamplerWrapper, self).__init__(env)
+        self.env = env
         self.transition_pairs: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
         self.current_obs: torch.Tensor or None = None
 
