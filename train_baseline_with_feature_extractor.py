@@ -21,7 +21,7 @@ if __name__ == '__main__':
     from stable_baselines3.common.env_util import DummyVecEnv
 
     TRAIN_CONFIGS = mix_sampling
-    TEST_CONFIGS = mix_sampling
+    EVAL_CONFIGS = mix_sampling
 
     # model configs
     NUM_ACTIONS = 4
@@ -133,19 +133,25 @@ if __name__ == '__main__':
     env = FeatureWrapper(DummyVecEnv(env_fns), feature_extractor.phi, device)
 
     # Check for the latest saved model
-    model_path, epoch_counter, agent_num_steps = find_latest_checkpoint(session_name)
+    model_path, epoch_counter, agent_step_counter = find_latest_checkpoint(session_name)
 
     # get callbacks
-    step_counter_callback = StepCounterCallback()
-
+    step_counter_callback = StepCounterCallback(init_counter_val=agent_step_counter)
     test_and_log_callback = TestAndLogCallback(
-        trap_31_test,
+        EVAL_CONFIGS,
         session_name,
         n_eval_episodes=NUM_EVAL_EPISODES,
         eval_freq=EVAL_FREQ,
-        start_num_steps=agent_num_steps,
+        start_num_steps=agent_step_counter,
         deterministic=False,
         render=False,
         verbose=1,
     )
 
+    # make model
+    model = PPO("MlpPolicy", env, verbose=1)
+    if model_path is not None:
+        model.load(model_path)
+
+    agent_step_counter = step_counter_callback.step_count
+    save_model(model, num_epoch=epoch_counter, num_step=agent_step_counter, base_name=session_name, save_dir=session_name)
