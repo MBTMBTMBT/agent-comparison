@@ -1,4 +1,6 @@
+import collections
 import copy
+import math
 import os
 import random
 import re
@@ -10,8 +12,11 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
+from torch.utils.data import DataLoader
 
 from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
+from env_sampler import TransitionBuffer
+from feature_model import FeatureNet
 from simple_gridworld import SimpleGridWorld, SimpleGridWorldWithStateAbstraction
 
 
@@ -237,6 +242,50 @@ def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models")
     return os.path.join(save_dir, latest_model), latest_model_iteration
 
 
+def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, decoder: torch.nn.Module, save_path: str, device=torch.device("cpu")):
+    encoder.eval()
+    decoder.eval()
+    # reset iterator before using it
+    iterable_env.iter_reset()
+    # Store z vectors from all iterations
+    z_vectors = []
+    fake_x_imgs = []
+    real_x_imgs = []
+    for observation, terminated, position, connections, reward in iterable_env:
+        if observation is not None:
+            observation = torch.unsqueeze(observation, dim=0).to(device)
+            with torch.no_grad():
+                z = encoder(observation)
+                fake_x = decoder(z)
+                z = z.detach().cpu().numpy()
+                fake_x = fake_x.detach().cpu().numpy()
+                z_vectors.append(z.squeeze(0))
+                fake_x_imgs.append(fake_x.squeeze(0))
+                real_x = observation.detach().cpu().numpy()
+                real_x_imgs.append(real_x.squeeze(0))
+            # plot reconstructed xs:
+            plt.figure()
+            num_xs = len(fake_x_imgs)
+            grid_size = math.ceil(math.sqrt(num_xs))  # Calculate grid size that's as square as possible
+            # Create a figure to hold the grid
+            fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+            # Flatten axes array for easier indexing
+            axes = axes.ravel()
+            for i, img in enumerate(fake_x_imgs):
+                # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+                img_transposed = img.transpose((1, 2, 0))
+                image_clipped = np.clip(img_transposed, 0, 1)
+                # Plot the image in its subplot
+                axes[i].imshow(image_clipped)
+                axes[i].axis('off')  # Hide the axis
+                # Hide any unused subplots if the number of images is not a perfect square
+                for j in range(i + 1, grid_size ** 2):
+                    axes[j].axis('off')
+            plt.tight_layout()
+            plt.savefig(save_path, dpi=100, bbox_inches='tight')
+            plt.close(fig)
+
+
 class TestAndLogCallback(BaseCallback):
     def __init__(
             self,
@@ -289,7 +338,7 @@ class TestAndLogCallback(BaseCallback):
             self.tb_writer.close()
 
 
-class UpdateEnvCallback(BaseCallback):
+class UpdateAbsEnvCallback(BaseCallback):
     def __init__(
             self,
             env_configurations: list[dict],
@@ -303,7 +352,7 @@ class UpdateEnvCallback(BaseCallback):
             control_info_weight: float = 101.0,
             plot_dir=None,
     ):
-        super(UpdateEnvCallback, self).__init__(verbose)
+        super(UpdateAbsEnvCallback, self).__init__(verbose)
         self.env_configs = env_configurations
         self.num_clusters_start = num_clusters_start
         self.num_clusters = num_clusters_start
@@ -349,3 +398,107 @@ class UpdateEnvCallback(BaseCallback):
                 self.num_clusters += 1
                 print(f"Updated number of clusters: {self.num_clusters} at step {self.num_timesteps}.")
         return True
+
+
+class UpdateFeatureExtractorCallback(BaseCallback):
+    def __init__(
+            self,
+            feature_extractor_full_model: FeatureNet,
+            # env_configurations: list[dict],
+            buffer_size_to_train=16384,
+            replay_times=4,
+            batch_size=64,
+            verbose=1,
+            plot_dir=None,
+            device=torch.device('cpu'),
+            tb_writer=None,
+            counter=0,
+            # show_progress_bar=False,
+    ):
+        super(UpdateFeatureExtractorCallback, self).__init__(verbose)
+        # self.env_configs = env_configurations
+        self.feature_extractor_full_model = feature_extractor_full_model
+        self.buffer_size_to_train = buffer_size_to_train
+        self.replay_times = replay_times
+        self.plot_dir = plot_dir
+        self.batch_size = batch_size
+        self.device = device
+        self.tb_writer = tb_writer
+        self.counter = counter
+        # self.show_progress_bar = show_progress_bar
+
+        self.model_updated_flag = False  # to know when to save the model
+        self.do_plot = False
+        self.verbose = verbose
+
+    def _on_step(self) -> bool:
+        # check if buffer is filled
+        if self.buffer_size_to_train < self.buffer_size_to_train:
+            return True
+
+        transition_buffer = self.get_buffer_obj()
+        dataloader = DataLoader(transition_buffer, batch_size=self.batch_size, shuffle=True)
+        for _ in range(self.replay_times):
+            for x0, a, x1 in dataloader:
+                x0 = x0.to(self.device)
+                a = a.to(self.device)
+                x1 = x1.to(self.device)
+                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = self.feature_extractor_full_model.train_batch(x0, x1, a)
+                if self.tb_writer is not None:
+                    self.tb_writer.add_scalar('loss', loss_val, self.counter)
+                    self.tb_writer.add_scalar('inv_loss', inv_loss_val, self.counter)
+                    self.tb_writer.add_scalar('ratio_loss', ratio_loss_val, self.counter)
+                    self.tb_writer.add_scalar('pixel_loss', pixel_loss_val, self.counter)
+                self.counter += 1
+
+        if self.do_plot and self.plot_dir is not None:
+            pass
+        # if self.prior_agent is None:
+        #     self.prior_agent = PPO("CnnPolicy", self.model.env, policy_kwargs={"normalize_images": False}, verbose=1)
+        #     # Copy the weights from the current model to the new_prior_agent
+        #     self.prior_agent.set_parameters(self.model.get_parameters())
+        #     print("Updated prior agent.")
+        # if self.n_calls % self.update_agent_freq == 0:
+        #     self.prior_agent = PPO("CnnPolicy", self.model.env, policy_kwargs={"normalize_images": False}, verbose=1)
+        #     # Copy the weights from the current model to the new_prior_agent
+        #     self.prior_agent.set_parameters(self.model.get_parameters())
+        #     print("Updated prior agent.")
+        # if self.n_calls % self.update_env_freq == 0:
+        #     for i in range(len(self.model.env.envs)):
+        #         if self.plot_dir is not None:
+        #             plot_path = os.path.join(self.plot_dir, self.env_configs[i]['env_file'].split('/')[-1].split('.')[
+        #                 0] + f"-step{self.n_calls}.png")
+        #             plot_path_cluster = os.path.join(self.plot_dir,
+        #                                              self.env_configs[i]['env_file'].split('/')[-1].split('.')[
+        #                                                  0] + f"-step{self.n_calls}.gif")
+        #         else:
+        #             plot_path = None
+        #             plot_path_cluster = None
+        #         new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.abs_rate,
+        #                                self.control_info_weight, plot_path=plot_path,
+        #                                plot_path_cluster=plot_path_cluster)
+        #         self.model.env.envs[i] = new_env
+        #         if self.verbose:
+        #             print(f"Updated environment {i} at step {self.num_timesteps}.")
+        # if self.n_calls % self.update_num_clusters_freq == 0:
+        #     if self.num_clusters < self.num_clusters_end:
+        #         self.num_clusters += 1
+        #         print(f"Updated number of clusters: {self.num_clusters} at step {self.num_timesteps}.")
+        return True
+
+    def get_sampler_size(self):
+        total_size = 0
+        for sampler_wrapper in self.model.env.envs:
+            total_size += len(sampler_wrapper.transition_pairs)
+        return total_size
+
+    def get_buffer_obj(self) -> TransitionBuffer:
+        transition_pairs = []
+        for sampler_wrapper in self.model.env.envs:
+            transition_pairs += sampler_wrapper.transition_pairs
+        transition_buffer = TransitionBuffer(transition_pairs)
+        return transition_buffer
+
+    def empty_sampler_buffers(self):
+        for sampler_wrapper in self.model.env.envs:
+            sampler_wrapper.transition_pairs = []
