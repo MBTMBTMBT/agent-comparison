@@ -6,9 +6,9 @@ import torch.nn
 class SimpleCNN(torch.nn.Module):
     def __init__(self, input_channels, num_features=64):
         super(SimpleCNN, self).__init__()
-        self.conv1 = torch.nn.Conv2d(input_channels, 32, kernel_size=3, stride=2, padding=1)
-        self.conv2 = torch.nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
-        self.conv3 = torch.nn.Conv2d(64, num_features, kernel_size=3, stride=2, padding=1)
+        self.conv1 = torch.nn.Conv2d(input_channels, 128, kernel_size=3, stride=2, padding=1)
+        self.conv2 = torch.nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1)
+        self.conv3 = torch.nn.Conv2d(128, num_features, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         x = torch.relu(self.conv1(x))
@@ -20,10 +20,10 @@ class SimpleCNN(torch.nn.Module):
 class FlexibleImageEncoder(torch.nn.Module):
     def __init__(self, input_channels, output_size):
         super(FlexibleImageEncoder, self).__init__()
-        self.feature_extractor = SimpleCNN(input_channels)
+        self.feature_extractor = SimpleCNN(input_channels, 128)
         self.adapt_pool = torch.nn.AdaptiveAvgPool2d((1, 1))
         self.fc = torch.nn.Sequential(
-            torch.nn.Linear(64, output_size),
+            torch.nn.Linear(128, output_size),
             # torch.nn.LeakyReLU(inplace=True),
             # torch.nn.Linear(128, 128),
             # torch.nn.Tanh(),
