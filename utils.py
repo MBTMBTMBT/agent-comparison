@@ -446,7 +446,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
     def __init__(
             self,
             feature_extractor_full_model: FeatureNet,
-            # env_configurations: list[dict],
+            env_configurations: list[dict],
             buffer_size_to_train=16384,
             replay_times=4,
             batch_size=64,
@@ -458,7 +458,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
             # show_progress_bar=False,
     ):
         super(UpdateFeatureExtractorCallback, self).__init__(verbose)
-        # self.env_configs = env_configurations
+        self.env_configs = env_configurations
         self.feature_extractor_full_model = feature_extractor_full_model
         self.buffer_size_to_train = buffer_size_to_train
         self.replay_times = replay_times
@@ -492,40 +492,17 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                     self.tb_writer.add_scalar('ratio_loss', ratio_loss_val, self.counter)
                     self.tb_writer.add_scalar('pixel_loss', pixel_loss_val, self.counter)
                 self.counter += 1
+                if self.verbose:
+                    print(f"Updated feature extractor at step {self.counter}, loss {loss_val:.3f}, inv loss: {inv_loss_val:.3f}, ratio loss: {ratio_loss_val:.3f}, pixel loss: {pixel_loss_val:.3f}")
 
         if self.do_plot and self.plot_dir is not None:
-            pass
-        # if self.prior_agent is None:
-        #     self.prior_agent = PPO("CnnPolicy", self.model.env, policy_kwargs={"normalize_images": False}, verbose=1)
-        #     # Copy the weights from the current model to the new_prior_agent
-        #     self.prior_agent.set_parameters(self.model.get_parameters())
-        #     print("Updated prior agent.")
-        # if self.n_calls % self.update_agent_freq == 0:
-        #     self.prior_agent = PPO("CnnPolicy", self.model.env, policy_kwargs={"normalize_images": False}, verbose=1)
-        #     # Copy the weights from the current model to the new_prior_agent
-        #     self.prior_agent.set_parameters(self.model.get_parameters())
-        #     print("Updated prior agent.")
-        # if self.n_calls % self.update_env_freq == 0:
-        #     for i in range(len(self.model.env.envs)):
-        #         if self.plot_dir is not None:
-        #             plot_path = os.path.join(self.plot_dir, self.env_configs[i]['env_file'].split('/')[-1].split('.')[
-        #                 0] + f"-step{self.n_calls}.png")
-        #             plot_path_cluster = os.path.join(self.plot_dir,
-        #                                              self.env_configs[i]['env_file'].split('/')[-1].split('.')[
-        #                                                  0] + f"-step{self.n_calls}.gif")
-        #         else:
-        #             plot_path = None
-        #             plot_path_cluster = None
-        #         new_env = make_abs_env(self.env_configs[i], self.prior_agent, self.model, self.abs_rate,
-        #                                self.control_info_weight, plot_path=plot_path,
-        #                                plot_path_cluster=plot_path_cluster)
-        #         self.model.env.envs[i] = new_env
-        #         if self.verbose:
-        #             print(f"Updated environment {i} at step {self.num_timesteps}.")
-        # if self.n_calls % self.update_num_clusters_freq == 0:
-        #     if self.num_clusters < self.num_clusters_end:
-        #         self.num_clusters += 1
-        #         print(f"Updated number of clusters: {self.num_clusters} at step {self.num_timesteps}.")
+            for config, env in zip(self.env_configs, self.model.env.envs):
+                env_path = config['env_file']
+                env_name = env_path.split('/')[-1].split('.')[0]
+                if not os.path.isdir(self.plot_dir):
+                    os.makedirs(self.plot_dir)
+                save_path = os.path.join(self.plot_dir, f"{env_name}_original_{self.counter}.png")
+                plot_decoded_images(env, self.feature_extractor_full_model.phi, self.feature_extractor_full_model.decoder, save_path, self.device)
         return True
 
     def get_sampler_size(self):
