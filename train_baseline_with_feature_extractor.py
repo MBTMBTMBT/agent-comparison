@@ -41,7 +41,7 @@ if __name__ == '__main__':
         'dis': 1.0,
         'dec': 1.0,
     }
-    BATCH_SIZE = 256
+    BATCH_SIZE = 32
     LR = 1e-4
 
     # train configs
@@ -119,7 +119,7 @@ if __name__ == '__main__':
             if feature_extractor_step_counter >= PRE_TRAIN_STEPS:
                 break
 
-        if feature_extractor_step_counter % SAVE_FREQ == 0:
+        if feature_extractor_step_counter % SAVE_FREQ == 0:  # issue here is this is not guaranteed to happen
             _save_name = f"{session_name}/{feature_model_name}_{feature_extractor_step_counter}.pth"
             print(f"Saving model with name {_save_name}")
             feature_extractor.save(_save_name, epoch_counter, feature_extractor_step_counter, performance)
