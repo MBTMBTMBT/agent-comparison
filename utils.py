@@ -377,7 +377,7 @@ def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.
 
 
 class StepCounterCallback(BaseCallback):
-    def __init__(self, verbose=0, init_counter_val=0, ):
+    def __init__(self, init_counter_val=0, verbose=0,):
         super(StepCounterCallback, self).__init__(verbose)
         self.step_count = init_counter_val
 
