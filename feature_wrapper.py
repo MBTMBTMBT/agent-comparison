@@ -1,4 +1,3 @@
-import gymnasium as gym
 import torch
 from stable_baselines3.common.vec_env import VecEnvWrapper
 
