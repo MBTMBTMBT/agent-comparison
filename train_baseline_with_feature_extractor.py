@@ -39,7 +39,7 @@ if __name__ == '__main__':
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
-        'dec': 0.1,
+        'dec': 1.0,
     }
     BATCH_SIZE = 256
     LR = 1e-4
@@ -135,23 +135,28 @@ if __name__ == '__main__':
     # Check for the latest saved model
     model_path, epoch_counter, agent_step_counter = find_latest_checkpoint(session_name)
 
-    # get callbacks
-    step_counter_callback = StepCounterCallback(init_counter_val=agent_step_counter)
-    test_and_log_callback = TestAndLogCallback(
-        EVAL_CONFIGS,
-        session_name,
-        n_eval_episodes=NUM_EVAL_EPISODES,
-        eval_freq=EVAL_FREQ,
-        start_num_steps=agent_step_counter,
-        deterministic=False,
-        render=False,
-        verbose=1,
-    )
-
     # make model
     model = PPO("MlpPolicy", env, verbose=1)
     if model_path is not None:
         model.load(model_path)
 
-    agent_step_counter = step_counter_callback.step_count
-    save_model(model, num_epoch=epoch_counter, num_step=agent_step_counter, base_name=session_name, save_dir=session_name)
+    print("Start Training:")
+
+    while epoch_counter < EPOCHS:
+        # get callbacks
+        step_counter_callback = StepCounterCallback(init_counter_val=agent_step_counter)
+        test_and_log_callback = TestAndLogCallback(
+            EVAL_CONFIGS,
+            session_name,
+            n_eval_episodes=NUM_EVAL_EPISODES,
+            eval_freq=EVAL_FREQ,
+            start_num_steps=agent_step_counter,
+            deterministic=False,
+            render=False,
+            verbose=1,
+        )
+
+        agent_step_counter = step_counter_callback.step_count
+        save_model(model, num_epoch=epoch_counter, num_step=agent_step_counter, base_name=session_name, save_dir=session_name)
+
+        epoch_counter += 1
