@@ -247,12 +247,14 @@ class FeatureNet(torch.nn.Module):
         # return torch.argmax(a_logits, dim=-1)
 
     def compute_loss(self, x0, x1, z0, z1, a):
-        loss = 0
-        loss += self.weights['inv'] * self.inverse_loss(z0, z1, a) if self.weights['inv'] >= 0 else 0
-        loss += self.weights['dis'] * self.ratio_loss(z0, z1) if self.weights['dis'] >= 0 else 0
-        loss += self.weights['dec'] * 0.5 * self.pixel_loss(x0, z0) if self.weights['dec'] >= 0 else 0
-        loss += self.weights['dec'] * 0.5 * self.pixel_loss(x1, z1) if self.weights['dec'] >= 0 else 0
-        return loss
+        loss = torch.tensor(0.0).to(self.device)
+        inv_loss = self.inverse_loss(z0, z1, a)
+        ratio_loss = self.ratio_loss(z0, z1)
+        pixel_loss = 0.5 * (self.pixel_loss(x0, z0) + self.pixel_loss(x1, z1))
+        loss += self.weights['inv'] * inv_loss if self.weights['inv'] >= 0 else 0
+        loss += self.weights['dis'] * ratio_loss if self.weights['dis'] >= 0 else 0
+        loss += self.weights['dec'] * pixel_loss if self.weights['dec'] >= 0 else 0
+        return loss, inv_loss, ratio_loss, pixel_loss
 
     def train_batch(self, x0, x1, a):
         self.train()
@@ -261,10 +263,10 @@ class FeatureNet(torch.nn.Module):
         z0 = self.phi(x0)
         z1 = self.phi(x1)
         # z1_hat = self.fwd_model(z0, a)
-        loss = self.compute_loss(x0, x1, z0, z1, a)
+        loss, inv_loss, ratio_loss, pixel_loss = self.compute_loss(x0, x1, z0, z1, a)
         loss.backward()
         self.optimizer.step()
-        return loss
+        return loss.detach().cpu().item(), inv_loss.detach().cpu().item(), ratio_loss.detach().cpu().item(), pixel_loss.detach().cpu().item()
 
     def save(self, checkpoint_path, counter=-1, _counter=-1, performance=0.0):
         torch.save(
