@@ -158,35 +158,51 @@ class FeatureNet(torch.nn.Module):
             lr=0.001,
             img_size=(128, 128),
             initial_scale_factor=2,
+            weights=None,
             device=torch.device('cpu')
     ):
         super().__init__()
+        if weights is None:
+            weights = {'inv': 1.0, 'dis': 1.0, 'dec': 0.1, }
         self.n_actions = n_actions
         self.n_latent_dims = n_latent_dims
+        self.n_units_per_layer = n_units_per_layer
+        self.n_hidden_layers = n_hidden_layers
         self.lr = lr
         self.device = device
+        self.weights = weights
 
         self.phi = FlexibleImageEncoder(
             input_channels=3,
             output_size=n_latent_dims,
         ).to(device)
-        self.inv_model = InvNet(
-            n_actions=n_actions,
-            n_latent_dims=n_latent_dims,
-            n_units_per_layer=n_units_per_layer,
-            n_hidden_layers=n_hidden_layers,
-        ).to(device)
-        self.discriminator = ContrastiveNet(
-            n_latent_dims=n_latent_dims,
-            n_hidden_layers=1,
-            n_units_per_layer=n_units_per_layer,
-        ).to(device)
-        self.decoder = FlexibleImageDecoder(
-            n_latent_dims=n_latent_dims, 
-            img_channels=3, 
-            img_size=img_size,
-            initial_scale_factor=initial_scale_factor,
-        )
+
+        if weights['inv'] >= 0.0:
+            self.inv_model = InvNet(
+                n_actions=n_actions,
+                n_latent_dims=n_latent_dims,
+                n_units_per_layer=n_units_per_layer,
+                n_hidden_layers=n_hidden_layers,
+            ).to(device)
+        else:
+            self.inv_model = None
+        if weights['dis'] >= 0.0:
+            self.discriminator = ContrastiveNet(
+                n_latent_dims=n_latent_dims,
+                n_hidden_layers=1,
+                n_units_per_layer=n_units_per_layer,
+            ).to(device)
+        else:
+            self.discriminator = None
+        if weights['dec'] >= 0.0:
+            self.decoder = FlexibleImageDecoder(
+                n_latent_dims=n_latent_dims,
+                img_channels=3,
+                img_size=img_size,
+                initial_scale_factor=initial_scale_factor,
+            )
+        else:
+            self.decoder = None
 
         self.cross_entropy = torch.nn.CrossEntropyLoss().to(device)
         self.bce_loss = torch.nn.BCELoss().to(device)
@@ -232,10 +248,10 @@ class FeatureNet(torch.nn.Module):
 
     def compute_loss(self, x0, x1, z0, z1, a):
         loss = 0
-        loss += 1.0 * self.inverse_loss(z0, z1, a)
-        loss += 1.0 * self.ratio_loss(z0, z1)
-        loss += 0.1 * 0.5 * self.pixel_loss(x0, z0)
-        loss += 0.1 * 0.5 * self.pixel_loss(x1, z1)
+        loss += self.weights['inv'] * self.inverse_loss(z0, z1, a) if self.weights['inv'] >= 0 else 0
+        loss += self.weights['dis'] * self.ratio_loss(z0, z1) if self.weights['dis'] >= 0 else 0
+        loss += self.weights['dec'] * 0.5 * self.pixel_loss(x0, z0) if self.weights['dec'] >= 0 else 0
+        loss += self.weights['dec'] * 0.5 * self.pixel_loss(x1, z1) if self.weights['dec'] >= 0 else 0
         return loss
 
     def train_batch(self, x0, x1, a):
@@ -258,16 +274,23 @@ class FeatureNet(torch.nn.Module):
                 'phi': self.phi.state_dict(),
                 'inv_model': self.inv_model.state_dict(),
                 'discriminator': self.discriminator.state_dict(),
+                'decoder': self.decoder.state_dict(),
                 'optimizer': self.optimizer.state_dict(),
                 'performance': performance,
+                'weights': self.weights,
             },
             checkpoint_path,
         )
 
     def load(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        weights = checkpoint['weights']  # not self
         self.phi.load_state_dict(checkpoint['phi'])
-        self.inv_model.load_state_dict(checkpoint['inv_model'])
-        self.discriminator.load_state_dict(checkpoint['discriminator'])
+        if weights['inv'] >= 0.0:
+            self.inv_model.load_state_dict(checkpoint['inv_model'])
+        if weights['dis'] >= 0.0:
+            self.discriminator.load_state_dict(checkpoint['discriminator'])
+        if weights['dec'] >= 0.0:
+            self.decoder.load_state_dict(checkpoint['decoder'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         return checkpoint['counter'], checkpoint['_counter'], checkpoint['performance']
