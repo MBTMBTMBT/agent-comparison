@@ -566,15 +566,72 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         if self.get_buffer_size() < self.buffer_size_to_train:
             return True
 
+        def model_checksum(model):
+            checksum = torch.tensor(0.0).to(self.device)
+            for param in model.parameters():
+                checksum += torch.sum(param.data)
+            return checksum.item()
+
+        # Inspecting weights before PPO instantiation
+        # print("Weights before:", list(feature_extractor.parameters())[0].data)
+        initial_checksum = model_checksum(self.feature_extractor_full_model)
+        print(f"Checksum before this round of training: {initial_checksum}")
+
         print('Training Feature extractor ...')
         self.feature_extractor_full_model.to(self.device)
+        self.feature_extractor_full_model.train()
         transition_buffer = self.get_buffer_obj()
+        # empty sampler buffers:
+        self.empty_sampler_buffers()
         dataloader = DataLoader(transition_buffer, batch_size=self.batch_size, shuffle=True)
+        # dataloader = DataLoader(transition_buffer, batch_size=1, shuffle=True)
+        # __counter = 0
         for _ in range(self.replay_times):
             for x0, a, x1 in dataloader:
                 x0 = x0.to(self.device)
                 a = a.to(self.device)
                 x1 = x1.to(self.device)
+
+                # if __counter < 5:
+                #     __counter += 1
+                #
+                #     ACTION_NAMES = {
+                #         0: 'UP',
+                #         1: 'DOWN',
+                #         2: 'LEFT',
+                #         3: 'RIGHT',
+                #     }
+                #
+                #     # Convert tensors to numpy for matplotlib
+                #     x0_np = x0.detach().cpu().numpy().squeeze(0).transpose(1, 2, 0)  # Transpose to channel-last format
+                #     x1_np = x1.detach().cpu().numpy().squeeze(0).transpose(1, 2, 0)  # Transpose to channel-last format
+                #
+                #     # Clamp values to [0, 1] range to ensure proper display
+                #     x0_np = x0_np.clip(0, 1)
+                #     x1_np = x1_np.clip(0, 1)
+                #
+                #     # Plotting
+                #     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+                #
+                #     # Display x0
+                #     axs[0].imshow(x0_np)
+                #     axs[0].axis('off')  # Hide axes for better visualization
+                #     axs[0].set_title('x0')
+                #
+                #     # Display action in the middle
+                #     action_name = ACTION_NAMES[a.detach().cpu().item()]  # Get action name
+                #     axs[1].text(0.5, 0.5, action_name, fontsize=15, ha='center')
+                #     axs[1].axis('off')
+                #     axs[1].set_title('Action')
+                #
+                #     # Display x1
+                #     axs[2].imshow(x1_np)
+                #     axs[2].axis('off')
+                #     axs[2].set_title('x1')
+                #
+                #     plt.tight_layout()
+                #     plt.show()
+
                 loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = self.feature_extractor_full_model.train_batch(
                     x0, x1, a)
                 if self.tb_writer is not None:
@@ -587,8 +644,6 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                     print(
                         f"Updated feature extractor at step {self.counter}, loss {loss_val:.3f}, inv loss: {inv_loss_val:.3f}, ratio loss: {ratio_loss_val:.3f}, pixel loss: {pixel_loss_val:.3f}")
 
-        # empty sampler buffers:
-        self.empty_sampler_buffers()
         # self.model_updated_flag = True
 
         if self.do_plot and self.plot_dir is not None:
@@ -600,11 +655,16 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                 save_path = os.path.join(self.plot_dir, f"{env_name}{self.counter}.png")
                 plot_decoded_images(wrapper.env, self.feature_extractor_full_model.phi,
                                     self.feature_extractor_full_model.decoder, save_path, self.device)
+
+        initial_checksum = model_checksum(self.feature_extractor_full_model)
+        print(f"Checksum after this round of training: {initial_checksum}")
+
         return True
 
     def get_buffer_size(self):
         total_size = 0
-        for sampler_wrapper in self.model.env.envs:
+        for i, sampler_wrapper in enumerate(self.model.env.envs):
+            # print(f'env {i}: {len(sampler_wrapper.transition_pairs)}')
             total_size += len(sampler_wrapper.transition_pairs)
         return total_size
 
