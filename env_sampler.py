@@ -51,10 +51,10 @@ class SamplerWrapper(gym.Wrapper):
         self.current_obs: torch.Tensor or None = None
 
     def step(self, action):
-        observation, reward, terminated, truncated, info = self.env.step(action)
-        self.transition_pairs.append((self.current_obs, torch.tensor(action), torch.tensor(observation)))
-        self.current_obs = observation
-        return observation, reward, terminated, truncated, info
+        next_obs, reward, terminated, truncated, info = self.env.step(action)
+        self.transition_pairs.append((self.current_obs, torch.tensor(action), torch.tensor(next_obs)))
+        self.current_obs = next_obs
+        return next_obs, reward, terminated, truncated, info
 
     def reset(self, **kwargs):
         observation, info = self.env.reset(**kwargs)
