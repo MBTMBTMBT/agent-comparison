@@ -24,7 +24,7 @@ if __name__ == '__main__':
     NUM_ACTIONS = 4
     LATENT_DIMS = 16
     RECONSTRUCT_SIZE = (96, 96)
-    RECONSTRUCT_SCALE = 2
+    RECONSTRUCT_SCALE = 4
 
     # sampler configs
     SAMPLE_SIZE = 16384 * 2
@@ -38,11 +38,11 @@ if __name__ == '__main__':
         'dis': 1.0,
         'dec': 1.0,
     }
-    BATCH_SIZE = 64
+    BATCH_SIZE = 128
     LR = 1e-4
 
     # train configs
-    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 100
+    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 200
     SAVE_FREQ = PRE_TRAIN_STEPS // 5
 
     EPOCHS = 1000
@@ -123,6 +123,17 @@ if __name__ == '__main__':
             print(f"Saving model with name {_save_name}")
             feature_extractor.save(_save_name, epoch_counter, feature_extractor_step_counter, performance)
             _save_counter = __save_counter
+
+            _plot_dir = os.path.join(session_name, 'plots')
+            for config, env in zip(TRAIN_CONFIGS, envs):
+                env_path = config['env_file']
+                env_name = env_path.split('/')[-1].split('.')[0]
+                if not os.path.isdir(_plot_dir):
+                    os.makedirs(_plot_dir)
+                save_path = os.path.join(_plot_dir, f"{env_name}{feature_extractor_step_counter}.png")
+                plot_decoded_images(env, feature_extractor.phi,
+                                    feature_extractor.decoder, save_path, device)
+
     pbar.close()
 
     _train_env_configurations = TRAIN_CONFIGS
