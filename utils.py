@@ -447,6 +447,7 @@ class TestAndLogCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         super(TestAndLogCallback, self)._on_step()
+        self.start_num_steps += 1
         # print(self.n_calls, self.eval_freq)
         if self.n_calls % self.eval_freq == 0:
             for env_name, env in zip(self.env_names, self.envs):

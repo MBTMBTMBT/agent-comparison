@@ -184,8 +184,8 @@ if __name__ == '__main__':
         feature_extractor_step_counter = update_feature_extractor_callback.counter
 
         save_model(model, num_epoch=epoch_counter, num_step=agent_step_counter, base_name=baseline_model_name, save_dir=session_name)
-        _save_name = f"{session_name}/{feature_model_name}_{feature_extractor_step_counter}.pth"
 
+        _save_name = f"{session_name}/{feature_model_name}_{feature_extractor_step_counter}.pth"
         print(f"Model save to {_save_name}")
         feature_extractor.save(_save_name, epoch_counter, feature_extractor_step_counter, performance)
         epoch_counter += 1
