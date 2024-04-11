@@ -7,8 +7,8 @@ class SimpleCNN(torch.nn.Module):
     def __init__(self, input_channels, num_features=64):
         super(SimpleCNN, self).__init__()
         self.conv1 = torch.nn.Conv2d(input_channels, 128, kernel_size=3, stride=2, padding=1)
-        self.conv2 = torch.nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1)
-        self.conv3 = torch.nn.Conv2d(128, num_features, kernel_size=3, stride=2, padding=1)
+        self.conv2 = torch.nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)
+        self.conv3 = torch.nn.Conv2d(256, num_features, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         x = torch.relu(self.conv1(x))
@@ -20,10 +20,10 @@ class SimpleCNN(torch.nn.Module):
 class FlexibleImageEncoder(torch.nn.Module):
     def __init__(self, input_channels, output_size):
         super(FlexibleImageEncoder, self).__init__()
-        self.feature_extractor = SimpleCNN(input_channels, 128)
+        self.feature_extractor = SimpleCNN(input_channels, 256)
         self.adapt_pool = torch.nn.AdaptiveAvgPool2d((1, 1))
         self.fc = torch.nn.Sequential(
-            torch.nn.Linear(128, output_size),
+            torch.nn.Linear(256, output_size),
             # torch.nn.LeakyReLU(inplace=True),
             # torch.nn.Linear(128, 128),
             # torch.nn.Tanh(),
@@ -59,11 +59,11 @@ class FlexibleImageDecoder(torch.nn.Module):
 
         # Expanded fully connected layers for increased complexity
         self.fc_layers = torch.nn.Sequential(
-            torch.nn.Linear(n_latent_dims, 128),
+            torch.nn.Linear(n_latent_dims, 256),
             torch.nn.LeakyReLU(inplace=True),
-            torch.nn.Linear(128, 128),
+            torch.nn.Linear(256, 256),
             torch.nn.LeakyReLU(inplace=True),
-            torch.nn.Linear(128, num_hidden_channels * self.init_height * self.init_width)
+            torch.nn.Linear(256, num_hidden_channels * self.init_height * self.init_width)
             # Output layer to match the size for convolutions
         )
 
