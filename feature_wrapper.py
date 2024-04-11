@@ -32,11 +32,12 @@ class CustomFeatureExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space: gym.spaces.Box, feature_extractor: torch.nn.Module, features_dim: int, device=torch.device('cpu')):
         # The output dimensions of your feature extractor
         super(CustomFeatureExtractor, self).__init__(observation_space, features_dim=features_dim)
-
-        self._feature_extractor = feature_extractor.to(device)
+        self.feature_extractor = feature_extractor
         self.device = device
 
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
+        self.feature_extractor.to(self.device)
+        self.feature_extractor.eval()
         observations = observations.to(self.device).float()
         with torch.no_grad():
-            return self._feature_extractor(observations).to(self.device)
+            return self.feature_extractor(observations)
