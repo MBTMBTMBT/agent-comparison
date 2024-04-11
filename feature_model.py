@@ -238,8 +238,8 @@ class FeatureNet(torch.nn.Module):
 
         return self.mse(fake_x, x)
 
-    def forward(self, *args, **kwargs):
-        raise NotImplementedError
+    def forward(self, x):
+        return self.phi(x)
 
     def predict_a(self, z0, z1):
         raise NotImplementedError
@@ -274,9 +274,9 @@ class FeatureNet(torch.nn.Module):
                 'counter': counter,
                 '_counter': _counter,
                 'phi': self.phi.state_dict(),
-                'inv_model': self.inv_model.state_dict(),
-                'discriminator': self.discriminator.state_dict(),
-                'decoder': self.decoder.state_dict(),
+                'inv_model': self.inv_model.state_dict() if self.weights['inv'] > 0.0 else None,
+                'discriminator': self.discriminator.state_dict() if self.weights['dis'] > 0.0 else None,
+                'decoder': self.decoder.state_dict() if self.weights['dec'] > 0.0 else None,
                 'optimizer': self.optimizer.state_dict(),
                 'performance': performance,
                 'weights': self.weights,
@@ -288,11 +288,11 @@ class FeatureNet(torch.nn.Module):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         weights = checkpoint['weights']  # not self
         self.phi.load_state_dict(checkpoint['phi'])
-        if weights['inv'] >= 0.0:
+        if weights['inv'] > 0.0:
             self.inv_model.load_state_dict(checkpoint['inv_model'])
-        if weights['dis'] >= 0.0:
+        if weights['dis'] > 0.0:
             self.discriminator.load_state_dict(checkpoint['discriminator'])
-        if weights['dec'] >= 0.0:
+        if weights['dec'] > 0.0:
             self.decoder.load_state_dict(checkpoint['decoder'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         return checkpoint['counter'], checkpoint['_counter'], checkpoint['performance']
