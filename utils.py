@@ -13,7 +13,7 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
 from env_sampler import TransitionBuffer
@@ -536,6 +536,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
             feature_extractor_full_model: FeatureNet,
             env_configurations: list[dict],
             buffer_size_to_train=16384,
+            sample_rate=1,
             replay_times=4,
             batch_size=64,
             verbose=1,
@@ -550,6 +551,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         self.envs = [make_env(each) for each in env_configurations]
         self.feature_extractor_full_model = feature_extractor_full_model
         self.buffer_size_to_train = buffer_size_to_train
+        self.sample_rate = sample_rate
         self.replay_times = replay_times
         self.plot_dir = plot_dir
         self.batch_size = batch_size
@@ -582,6 +584,12 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         self.feature_extractor_full_model.to(self.device)
         self.feature_extractor_full_model.train()
         transition_buffer = self.get_buffer_obj()
+        if self.sample_rate <= 0.9999:
+            # Generate random indices
+            num_samples = int(len(transition_buffer) * self.sample_rate)
+            indices = np.random.choice(len(transition_buffer), num_samples, replace=False)
+            # Create the subset
+            transition_buffer = Subset(transition_buffer, indices)
         # empty sampler buffers:
         self.empty_sampler_buffers()
         dataloader = DataLoader(transition_buffer, batch_size=self.batch_size, shuffle=True)

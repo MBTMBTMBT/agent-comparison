@@ -31,6 +31,7 @@ if __name__ == '__main__':
     SAMPLE_REPLAY_TIME = 1
     MAX_SAMPLE_STEP = SAMPLE_SIZE // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME
     VEC_ENV_REPEAT_TIME = 1
+    SAMPLE_RATE = 0.5  # not for pre-training
 
     # train hyperparams
     WEIGHTS = {
@@ -38,7 +39,7 @@ if __name__ == '__main__':
         'dis': 1.0,
         'dec': 1.0,
     }
-    BATCH_SIZE = 128
+    BATCH_SIZE = 32
     LR = 1e-4
 
     # train configs
@@ -151,7 +152,7 @@ if __name__ == '__main__':
 
                 # Update the progress bar description with the latest loss values
                 pbar.set_description(
-                    f"Progress - Loss: {loss_val:.3f}, Inv: {inv_loss_val:.3f}, Ratio: {ratio_loss_val:.3f}, Pixel: {pixel_loss_val:.3f}")
+                    f"Loss:{loss_val:.3f}-Inv:{inv_loss_val:.3f}-Ratio:{ratio_loss_val:.3f}-Pixel:{pixel_loss_val:.3f}")
                 pbar.update(1)  # Assuming each batch represents a single step, adjust as necessary
 
                 feature_extractor_step_counter += 1
@@ -236,6 +237,7 @@ if __name__ == '__main__':
                     feature_extractor,
                     env_configurations=TRAIN_CONFIGS,
                     buffer_size_to_train=SAMPLE_SIZE,
+                    sample_rate=SAMPLE_RATE,
                     replay_times=SAMPLE_REPLAY_TIME,
                     batch_size=BATCH_SIZE,
                     verbose=0,
