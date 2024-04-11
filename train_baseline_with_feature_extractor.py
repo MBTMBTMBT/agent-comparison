@@ -94,12 +94,55 @@ if __name__ == '__main__':
 
         transition_buffer = TransitionBuffer(sampler.transition_pairs)
         dataloader = DataLoader(transition_buffer, batch_size=BATCH_SIZE, shuffle=True)
+        # dataloader = DataLoader(transition_buffer, batch_size=1, shuffle=True)
         loss_val = 0.0
         for _ in range(SAMPLE_REPLAY_TIME):
+            # __counter = 0
             for x0, a, x1 in dataloader:
                 x0 = x0.to(device)
                 a = a.to(device)
                 x1 = x1.to(device)
+
+                # if __counter < 20:
+                #     __counter += 1
+                #
+                #     ACTION_NAMES = {
+                #         0: 'UP',
+                #         1: 'DOWN',
+                #         2: 'LEFT',
+                #         3: 'RIGHT',
+                #     }
+                #
+                #     # Convert tensors to numpy for matplotlib
+                #     x0_np = x0.detach().cpu().numpy().squeeze(0).transpose(1, 2, 0)  # Transpose to channel-last format
+                #     x1_np = x1.detach().cpu().numpy().squeeze(0).transpose(1, 2, 0)  # Transpose to channel-last format
+                #
+                #     # Clamp values to [0, 1] range to ensure proper display
+                #     x0_np = x0_np.clip(0, 1)
+                #     x1_np = x1_np.clip(0, 1)
+                #
+                #     # Plotting
+                #     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+                #
+                #     # Display x0
+                #     axs[0].imshow(x0_np)
+                #     axs[0].axis('off')  # Hide axes for better visualization
+                #     axs[0].set_title('x0')
+                #
+                #     # Display action in the middle
+                #     action_name = ACTION_NAMES[a.detach().cpu().item()]  # Get action name
+                #     axs[1].text(0.5, 0.5, action_name, fontsize=15, ha='center')
+                #     axs[1].axis('off')
+                #     axs[1].set_title('Action')
+                #
+                #     # Display x1
+                #     axs[2].imshow(x1_np)
+                #     axs[2].axis('off')
+                #     axs[2].set_title('x1')
+                #
+                #     plt.tight_layout()
+                #     plt.show()
+
                 loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = feature_extractor.train_batch(x0, x1, a)
                 tb_writer.add_scalar('loss', loss_val, feature_extractor_step_counter)
                 tb_writer.add_scalar('inv_loss', inv_loss_val, feature_extractor_step_counter)
@@ -147,11 +190,39 @@ if __name__ == '__main__':
     # Check for the latest saved model
     model_path, epoch_counter, agent_step_counter = find_newest_model(baseline_model_name, session_name)
 
+    # def model_checksum(model):
+    #     checksum = torch.tensor(0.0).to(device)
+    #     for param in model.parameters():
+    #         checksum += torch.sum(param.data)
+    #     return checksum.item()
+
+    # # Inspecting weights before PPO instantiation
+    # print("Weights before:", list(feature_extractor.parameters())[0].data)
+    # initial_checksum = model_checksum(feature_extractor)
+    # print(f"Initial Checksum: {initial_checksum}")
+
+    # Save the original state of the feature extractor
+    original_state_dict = feature_extractor.state_dict()
+
+    # get a temporary feature extractor
+    temp_feature_extractor = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=RECONSTRUCT_SIZE,
+                                        initial_scale_factor=RECONSTRUCT_SCALE, device=device).to(device)
+
     # make model
     model = PPO("MlpPolicy", env, n_steps=MAX_SAMPLE_STEP, verbose=1, policy_kwargs={
         'features_extractor_class': CustomFeatureExtractor,
-        'features_extractor_kwargs': {'feature_extractor': feature_extractor.phi, 'features_dim': LATENT_DIMS, 'device': device}
+        'features_extractor_kwargs': {'feature_extractor': temp_feature_extractor, 'features_dim': LATENT_DIMS, 'device': device}
     })
+
+    # Restore the original parameters to the feature extractor
+    feature_extractor = model.policy.features_extractor.feature_extractor
+    feature_extractor.load_state_dict(original_state_dict)
+
+    # # Inspecting weights after PPO instantiation
+    # print("Weights after:", list(feature_extractor.parameters())[0].data)
+    # post_initialization_checksum = model_checksum(feature_extractor)
+    # print(f"Post-Initialization Checksum: {post_initialization_checksum}")
+
     if model_path is not None:
         print(f"Loading model from {model_path}")
         model.load(model_path)
