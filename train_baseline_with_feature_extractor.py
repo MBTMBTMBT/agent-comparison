@@ -6,12 +6,9 @@ if __name__ == '__main__':
     from torch.utils.data import DataLoader
     from torch.utils.tensorboard import SummaryWriter
     from tqdm import tqdm
-    import math
-    import torch
     from configurations import mix_sampling
     from feature_model import FeatureNet
     from utils import find_latest_checkpoint
-    import os
     from env_sampler import TransitionBuffer, RandomSampler, SamplerWrapper
     from utils import make_env
     from stable_baselines3 import PPO
@@ -21,7 +18,7 @@ if __name__ == '__main__':
     from stable_baselines3.common.env_util import DummyVecEnv
 
     TRAIN_CONFIGS = mix_sampling
-    EVAL_CONFIGS = mix_sampling
+    EVAL_CONFIGS = mix_sampling_eval
 
     # model configs
     NUM_ACTIONS = 4
@@ -87,6 +84,7 @@ if __name__ == '__main__':
     # Initialize the progress bar
     pbar = tqdm(total=PRE_TRAIN_STEPS, initial=feature_extractor_step_counter, desc="Pre-Train Progress")
 
+    _save_counter = 0
     while feature_extractor_step_counter < PRE_TRAIN_STEPS:
         sampler = RandomSampler()
         envs = [make_env(config) for config in TRAIN_CONFIGS]
@@ -110,7 +108,7 @@ if __name__ == '__main__':
 
                 # Update the progress bar description with the latest loss values
                 pbar.set_description(
-                    f"Progress - Loss: {loss_val:.4f}, Inv: {inv_loss_val:.4f}, Ratio: {ratio_loss_val:.4f}, Pixel: {pixel_loss_val:.4f}")
+                    f"Progress - Loss: {loss_val:.3f}, Inv: {inv_loss_val:.3f}, Ratio: {ratio_loss_val:.3f}, Pixel: {pixel_loss_val:.3f}")
                 pbar.update(1)  # Assuming each batch represents a single step, adjust as necessary
 
                 feature_extractor_step_counter += 1
@@ -119,10 +117,12 @@ if __name__ == '__main__':
             if feature_extractor_step_counter >= PRE_TRAIN_STEPS:
                 break
 
-        if feature_extractor_step_counter % SAVE_FREQ == 0:  # issue here is this is not guaranteed to happen
+        __save_counter = feature_extractor_step_counter // SAVE_FREQ
+        if __save_counter > _save_counter:
             _save_name = f"{session_name}/{feature_model_name}_{feature_extractor_step_counter}.pth"
             print(f"Saving model with name {_save_name}")
             feature_extractor.save(_save_name, epoch_counter, feature_extractor_step_counter, performance)
+            _save_counter = __save_counter
     pbar.close()
 
     _train_env_configurations = TRAIN_CONFIGS
