@@ -27,7 +27,7 @@ if __name__ == '__main__':
     RECONSTRUCT_SCALE = 2
 
     # sampler configs
-    SAMPLE_SIZE = 16384
+    SAMPLE_SIZE = 16384 * 2
     SAMPLE_REPLAY_TIME = 1
     MAX_SAMPLE_STEP = SAMPLE_SIZE // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME
     VEC_ENV_REPEAT_TIME = 1
@@ -38,12 +38,12 @@ if __name__ == '__main__':
         'dis': 1.0,
         'dec': 1.0,
     }
-    BATCH_SIZE = 32
+    BATCH_SIZE = 64
     LR = 1e-4
 
     # train configs
     PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 100
-    SAVE_FREQ = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 10
+    SAVE_FREQ = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 2
 
     EPOCHS = 1000
     NUM_STEPS_PER_EPOCH = MAX_SAMPLE_STEP * len(TRAIN_CONFIGS) * SAMPLE_REPLAY_TIME * 20
@@ -137,7 +137,7 @@ if __name__ == '__main__':
     model_path, epoch_counter, agent_step_counter = find_newest_model(baseline_model_name, session_name)
 
     # make model
-    model = PPO("MlpPolicy", env, verbose=1, policy_kwargs={
+    model = PPO("MlpPolicy", env, n_steps=MAX_SAMPLE_STEP, verbose=1, policy_kwargs={
         'features_extractor_class': CustomFeatureExtractor,
         'features_extractor_kwargs': {'feature_extractor': feature_extractor.phi, 'features_dim': LATENT_DIMS, 'device': device}
     })

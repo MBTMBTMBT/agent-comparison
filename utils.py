@@ -456,11 +456,11 @@ class TestAndLogCallback(BaseCallback):
                                                           deterministic=self.deterministic, render=self.render)
 
                 # Log results for each environment under a unique name
-                self.tb_writer.add_scalar(f'{env_name}/mean_reward', mean_reward, self.num_timesteps)
-                self.tb_writer.add_scalar(f'{env_name}/std_reward', std_reward, self.num_timesteps)
+                self.tb_writer.add_scalar(f'{env_name}/mean_reward', mean_reward, self.start_num_steps)
+                self.tb_writer.add_scalar(f'{env_name}/std_reward', std_reward, self.start_num_steps)
 
                 if self.verbose > 0:
-                    print(f"Step: {self.num_timesteps}. {env_name} Mean reward: {mean_reward} +/- {std_reward}.")
+                    print(f"Step: {self.start_num_steps}. {env_name} Mean reward: {mean_reward} +/- {std_reward}.")
         return True
 
     def _on_training_end(self) -> None:
