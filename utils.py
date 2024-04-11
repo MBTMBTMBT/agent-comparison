@@ -567,16 +567,16 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         if self.get_buffer_size() < self.buffer_size_to_train:
             return True
 
-        def model_checksum(model):
-            checksum = torch.tensor(0.0).to(self.device)
-            for param in model.parameters():
-                checksum += torch.sum(param.data)
-            return checksum.item()
+        # def model_checksum(model):
+        #     checksum = torch.tensor(0.0).to(self.device)
+        #     for param in model.parameters():
+        #         checksum += torch.sum(param.data)
+        #     return checksum.item()
 
-        # Inspecting weights before PPO instantiation
-        # print("Weights before:", list(feature_extractor.parameters())[0].data)
-        initial_checksum = model_checksum(self.feature_extractor_full_model)
-        print(f"Checksum before this round of training: {initial_checksum}")
+        # # Inspecting weights before PPO instantiation
+        # # print("Weights before:", list(feature_extractor.parameters())[0].data)
+        # initial_checksum = model_checksum(self.feature_extractor_full_model)
+        # print(f"Checksum before this round of training: {initial_checksum}")
 
         print('Training Feature extractor ...')
         self.feature_extractor_full_model.to(self.device)
@@ -657,8 +657,8 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                 plot_decoded_images(env, self.feature_extractor_full_model.phi,
                                     self.feature_extractor_full_model.decoder, save_path, self.device)
 
-        initial_checksum = model_checksum(self.feature_extractor_full_model)
-        print(f"Checksum after this round of training: {initial_checksum}")
+        # initial_checksum = model_checksum(self.feature_extractor_full_model)
+        # print(f"Checksum after this round of training: {initial_checksum}")
 
         return True
 
