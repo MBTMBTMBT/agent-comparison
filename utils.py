@@ -547,6 +547,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
     ):
         super(UpdateFeatureExtractorCallback, self).__init__(verbose)
         self.env_configs = env_configurations
+        self.envs = [make_env(each) for each in env_configurations]
         self.feature_extractor_full_model = feature_extractor_full_model
         self.buffer_size_to_train = buffer_size_to_train
         self.replay_times = replay_times
@@ -647,13 +648,13 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         # self.model_updated_flag = True
 
         if self.do_plot and self.plot_dir is not None:
-            for config, wrapper in zip(self.env_configs, self.model.env.envs):
+            for config, env in zip(self.env_configs, self.envs):
                 env_path = config['env_file']
                 env_name = env_path.split('/')[-1].split('.')[0]
                 if not os.path.isdir(self.plot_dir):
                     os.makedirs(self.plot_dir)
                 save_path = os.path.join(self.plot_dir, f"{env_name}{self.counter}.png")
-                plot_decoded_images(wrapper.env, self.feature_extractor_full_model.phi,
+                plot_decoded_images(env, self.feature_extractor_full_model.phi,
                                     self.feature_extractor_full_model.decoder, save_path, self.device)
 
         initial_checksum = model_checksum(self.feature_extractor_full_model)
