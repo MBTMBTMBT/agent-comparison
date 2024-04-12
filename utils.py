@@ -1,7 +1,10 @@
-import copy
+import collections
+import math
 import os
 import random
 import re
+
+import gymnasium
 import numpy as np
 import matplotlib.pyplot as plt
 import imageio
@@ -10,14 +13,18 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
+from torch.utils.data import DataLoader, Subset
 
 from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
+from env_sampler import TransitionBuffer
+from feature_model import FeatureNet
 from simple_gridworld import SimpleGridWorld, SimpleGridWorldWithStateAbstraction
+from typing import Type
 
 
-def find_latest_checkpoint(model_dir):
+def find_latest_checkpoint(model_dir, start_with='model_epoch_'):
     """Find the latest model checkpoint in the given directory."""
-    checkpoints = [f for f in os.listdir(model_dir) if f.startswith('model_epoch_') and f.endswith('.pth')]
+    checkpoints = [f for f in os.listdir(model_dir) if f.startswith(start_with) and f.endswith('.pth')]
     if not checkpoints:
         return None
 
@@ -116,7 +123,7 @@ def save_trajectory_as_gif(trajectory, rewards, action_dict: dict[int, str], fol
     imageio.mimsave(filepath, images_with_actions, fps=10)
 
 
-def make_env(configure: dict) -> SimpleGridWorld:
+def make_env(configure: dict, wrapper: Type[gymnasium.Wrapper] = None) -> SimpleGridWorld:
     env = None
     if configure["env_type"] == "SimpleGridworld":
         if "cell_size" in configure.keys():
@@ -161,6 +168,8 @@ def make_env(configure: dict) -> SimpleGridWorld:
             make_random=make_random,
             max_steps=max_steps
         )
+        if wrapper is not None:
+            env = wrapper(env)
     return env
 
 
@@ -205,14 +214,14 @@ def make_abs_env(
 #     return model, optimizer, epoch, best_val_loss
 
 
-def save_model(model, iteration, base_name="simple-gridworld-ppo", save_dir="saved-models"):
+def old_save_model(model, iteration, base_name="simple-gridworld-ppo", save_dir="saved-models"):
     """Save the model with a custom base name, iteration number, and directory."""
     model_path = os.path.join(save_dir, f"{base_name}-{iteration}.zip")
     model.save(model_path)
     print(f"Model saved to {model_path}")
 
 
-def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models"):
+def old_find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models"):
     """Find the most recently saved model based on iteration number and custom base name, and return its path and
     iteration number."""
     model_files = [f for f in os.listdir(save_dir) if f.startswith(base_name) and f.endswith('.zip')]
@@ -237,6 +246,171 @@ def find_newest_model(base_name="simple-gridworld-ppo", save_dir="saved-models")
     return os.path.join(save_dir, latest_model), latest_model_iteration
 
 
+def save_model(model, num_epoch: int, num_step: int, base_name: str, save_dir: str):
+    model_path = os.path.join(save_dir, f'{base_name}-EPOCH{num_epoch}-STEP{num_step}.zip')
+    model.save(model_path)
+    print(f"Model saved to {model_path}")
+
+
+def find_newest_model(base_name: str, save_dir: str):
+    """
+    Find the model with the same base name but the largest num_epoch.
+    Return model path, epoch, and number of steps.
+    """
+    model_files = [f for f in os.listdir(save_dir) if f.startswith(base_name) and f.endswith('.zip')]
+    if not model_files:
+        return None, -1, -1  # No model found
+
+    max_epoch = -1
+    num_steps = -1
+    model_path = None
+
+    for f in model_files:
+        parts = f.split('-')
+        try:
+            epoch_part = parts[1]  # Assuming format is always correct
+            step_part = parts[2]
+
+            epoch_num = int(epoch_part.replace('EPOCH', ''))
+            step_num = int(step_part.replace('STEP', '').split('.')[0])  # Removing '.zip' and converting to int
+
+            if epoch_num > max_epoch:
+                max_epoch = epoch_num
+                num_steps = step_num
+                model_path = os.path.join(save_dir, f)
+        except ValueError:
+            # If parsing fails, skip this file
+            continue
+
+    return model_path, max_epoch, num_steps
+
+
+def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, decoder: torch.nn.Module,
+                        save_path: str, device=torch.device("cpu")):
+    encoder.to(device)
+    decoder.to(device)
+    encoder.eval()
+    decoder.eval()
+    # reset iterator before using it
+    iterable_env.iter_reset()
+    # Store z vectors from all iterations
+    z_vectors = []
+    fake_x_imgs = []
+    real_x_imgs = []
+    for observation, terminated, position, connections, reward in iterable_env:
+        if observation is not None:
+            observation = torch.unsqueeze(observation, dim=0).to(device)
+            with torch.no_grad():
+                z = encoder(observation)
+                fake_x = decoder(z)
+                z = z.detach().cpu().numpy()
+                fake_x = fake_x.detach().cpu().numpy()
+                z_vectors.append(z.squeeze(0))
+                fake_x_imgs.append(fake_x.squeeze(0))
+                real_x = observation.detach().cpu().numpy()
+                real_x_imgs.append(real_x.squeeze(0))
+    # plot reconstructed xs:
+    plt.figure()
+    num_xs = len(fake_x_imgs)
+    grid_size = math.ceil(math.sqrt(num_xs))  # Calculate grid size that's as square as possible
+    # Create a figure to hold the grid
+    fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+    # Flatten axes array for easier indexing
+    axes = axes.ravel()
+    for i, img in enumerate(fake_x_imgs):
+        # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+        img_transposed = img.transpose((1, 2, 0))
+        image_clipped = np.clip(img_transposed, 0, 1)
+        # Plot the image in its subplot
+        axes[i].imshow(image_clipped)
+        axes[i].axis('off')  # Hide the axis
+        # Hide any unused subplots if the number of images is not a perfect square
+        for j in range(i + 1, grid_size ** 2):
+            axes[j].axis('off')
+    plt.tight_layout()
+    plt.savefig(save_path.split('.')[-2]+'_decoded.png', dpi=100, bbox_inches='tight')
+    plt.close(fig)
+
+    # plot reconstructed xs:
+    plt.figure()
+    # Create a figure to hold the grid
+    fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+    # Flatten axes array for easier indexing
+    axes = axes.ravel()
+    for i, img in enumerate(real_x_imgs):
+        # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+        img_transposed = img.transpose((1, 2, 0))
+        image_clipped = np.clip(img_transposed, 0, 1)
+        # Plot the image in its subplot
+        axes[i].imshow(image_clipped)
+        axes[i].axis('off')  # Hide the axis
+        # Hide any unused subplots if the number of images is not a perfect square
+        for j in range(i + 1, grid_size ** 2):
+            axes[j].axis('off')
+    plt.tight_layout()
+    plt.savefig(save_path.split('.')[-2] + '_original.png', dpi=100, bbox_inches='tight')
+    plt.close(fig)
+
+
+def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, num_dims: int,
+                         save_path: str, device=torch.device("cpu")):
+    assert num_dims == 2 or num_dims == 3
+    encoder.to(device)
+    encoder.eval()
+    z_vectors = []
+    # reset iterator before using it
+    iterable_env.iter_reset()
+    for observation, terminated, position, connections, reward in iterable_env:
+        if observation is not None:
+            observation = torch.unsqueeze(observation, dim=0).to(device)
+            with torch.no_grad():
+                z = encoder(observation)
+                z = z.detach().cpu().numpy()
+                z_vectors.append(z.squeeze(0))
+    if num_dims == 2:
+        plt.figure(figsize=(8, 8))
+        for z in z_vectors:
+            plt.scatter(z[0], z[1])
+        plt.xlabel("Dimension 1")
+        plt.ylabel("Dimension 2")
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        for z in z_vectors:
+            ax.scatter(z[0], z[1], z[2])
+        ax.set_xlabel("Dimension 1")
+        ax.set_ylabel("Dimension 2")
+        ax.set_zlabel("Dimension 3")
+        # different view directions
+        views = [(30, 30), (30, 60), (30, 90), (60, 30), (60, 60), (90, 90), ]  # List of (elev, azim) pairs
+        # Save the plot
+        save_name = os.path.basename(save_path).split(".")[0]
+        save_dir = os.path.dirname(save_path)
+        for i, (elev, azim) in enumerate(views, start=1):
+            ax.view_init(elev=elev, azim=azim)
+            plt.draw()  # Update the plot with the new view
+            # Save each view to a different file
+            save_path_ = os.path.join(save_dir, f"{save_name}_view{i}.png")
+            plt.savefig(save_path_)
+            # print(f"Saved plot to {save_path}")
+        plt.close(fig)  # Close the plot figure after saving all views
+
+
+class StepCounterCallback(BaseCallback):
+    def __init__(self, init_counter_val=0, verbose=0,):
+        super(StepCounterCallback, self).__init__(verbose)
+        self.step_count = init_counter_val
+
+    def _on_step(self) -> bool:
+        self.step_count += 1
+        # can also control training by returning False to stop
+        # for example, stop after 10,000 steps
+        # return self.step_count <= 10000
+        return True
+
+
 class TestAndLogCallback(BaseCallback):
     def __init__(
             self,
@@ -245,6 +419,7 @@ class TestAndLogCallback(BaseCallback):
             # session_name: str,
             n_eval_episodes=10,
             eval_freq=10000,
+            start_num_steps: int or None = None,
             deterministic=False,
             render=False,
             verbose=1,
@@ -263,6 +438,10 @@ class TestAndLogCallback(BaseCallback):
         self.tb_writer = None
         self.eval_timesteps = []
 
+        self.start_num_steps = self.num_timesteps
+        if start_num_steps is not None:
+            self.start_num_steps = start_num_steps
+
     def _init_callback(self) -> None:
         if self.tb_writer is None:
             from torch.utils.tensorboard import SummaryWriter
@@ -270,6 +449,8 @@ class TestAndLogCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         super(TestAndLogCallback, self)._on_step()
+        self.start_num_steps += 1
+        # print(self.n_calls, self.eval_freq)
         if self.n_calls % self.eval_freq == 0:
             for env_name, env in zip(self.env_names, self.envs):
                 # Manually evaluate the policy on each environment
@@ -277,11 +458,11 @@ class TestAndLogCallback(BaseCallback):
                                                           deterministic=self.deterministic, render=self.render)
 
                 # Log results for each environment under a unique name
-                self.tb_writer.add_scalar(f'{env_name}/mean_reward', mean_reward, self.num_timesteps)
-                self.tb_writer.add_scalar(f'{env_name}/std_reward', std_reward, self.num_timesteps)
+                self.tb_writer.add_scalar(f'{env_name}/mean_reward', mean_reward, self.start_num_steps)
+                self.tb_writer.add_scalar(f'{env_name}/std_reward', std_reward, self.start_num_steps)
 
                 if self.verbose > 0:
-                    print(f"Step: {self.num_timesteps}. {env_name} Mean reward: {mean_reward} +/- {std_reward}.")
+                    print(f"Step: {self.start_num_steps}. {env_name} Mean reward: {mean_reward} +/- {std_reward}.")
         return True
 
     def _on_training_end(self) -> None:
@@ -289,7 +470,7 @@ class TestAndLogCallback(BaseCallback):
             self.tb_writer.close()
 
 
-class UpdateEnvCallback(BaseCallback):
+class UpdateAbsEnvCallback(BaseCallback):
     def __init__(
             self,
             env_configurations: list[dict],
@@ -303,7 +484,7 @@ class UpdateEnvCallback(BaseCallback):
             control_info_weight: float = 101.0,
             plot_dir=None,
     ):
-        super(UpdateEnvCallback, self).__init__(verbose)
+        super(UpdateAbsEnvCallback, self).__init__(verbose)
         self.env_configs = env_configurations
         self.num_clusters_start = num_clusters_start
         self.num_clusters = num_clusters_start
@@ -349,3 +530,166 @@ class UpdateEnvCallback(BaseCallback):
                 self.num_clusters += 1
                 print(f"Updated number of clusters: {self.num_clusters} at step {self.num_timesteps}.")
         return True
+
+
+class UpdateFeatureExtractorCallback(BaseCallback):
+    def __init__(
+            self,
+            feature_extractor_full_model: FeatureNet,
+            env_configurations: list[dict],
+            buffer_size_to_train=16384,
+            sample_rate=1,
+            replay_times=4,
+            batch_size=64,
+            verbose=1,
+            plot_dir=None,
+            device=torch.device('cpu'),
+            tb_writer=None,
+            counter=0,
+            # show_progress_bar=False,
+    ):
+        super(UpdateFeatureExtractorCallback, self).__init__(verbose)
+        self.env_configs = env_configurations
+        self.envs = [make_env(each) for each in env_configurations]
+        self.feature_extractor_full_model = feature_extractor_full_model
+        self.buffer_size_to_train = buffer_size_to_train
+        self.sample_rate = sample_rate
+        self.replay_times = replay_times
+        self.plot_dir = plot_dir
+        self.batch_size = batch_size
+        self.device = device
+        self.tb_writer = tb_writer
+        self.counter = counter
+        # self.show_progress_bar = show_progress_bar
+
+        # self.model_updated_flag = False  # to know when to save the model
+        self.do_plot = plot_dir is not None
+        self.verbose = verbose
+
+    def _on_step(self) -> bool:
+        # check if buffer is filled
+        if self.get_buffer_size() < self.buffer_size_to_train:
+            return True
+
+        # def model_checksum(model):
+        #     checksum = torch.tensor(0.0).to(self.device)
+        #     for param in model.parameters():
+        #         checksum += torch.sum(param.data)
+        #     return checksum.item()
+
+        # # Inspecting weights before PPO instantiation
+        # # print("Weights before:", list(feature_extractor.parameters())[0].data)
+        # initial_checksum = model_checksum(self.feature_extractor_full_model)
+        # print(f"Checksum before this round of training: {initial_checksum}")
+
+        print('Training Feature extractor ...')
+        self.feature_extractor_full_model.to(self.device)
+        self.feature_extractor_full_model.train()
+        transition_buffer = self.get_buffer_obj()
+        if self.sample_rate <= 0.9999:
+            # Generate random indices
+            num_samples = int(len(transition_buffer) * self.sample_rate)
+            indices = np.random.choice(len(transition_buffer), num_samples, replace=False)
+            # Create the subset
+            transition_buffer = Subset(transition_buffer, indices)
+        # empty sampler buffers:
+        self.empty_sampler_buffers()
+        dataloader = DataLoader(transition_buffer, batch_size=self.batch_size, shuffle=True)
+        # dataloader = DataLoader(transition_buffer, batch_size=1, shuffle=True)
+        # __counter = 0
+        for _ in range(self.replay_times):
+            for x0, a, x1 in dataloader:
+                x0 = x0.to(self.device)
+                a = a.to(self.device)
+                x1 = x1.to(self.device)
+
+                # if __counter < 5:
+                #     __counter += 1
+                #
+                #     ACTION_NAMES = {
+                #         0: 'UP',
+                #         1: 'DOWN',
+                #         2: 'LEFT',
+                #         3: 'RIGHT',
+                #     }
+                #
+                #     # Convert tensors to numpy for matplotlib
+                #     x0_np = x0.detach().cpu().numpy().squeeze(0).transpose(1, 2, 0)  # Transpose to channel-last format
+                #     x1_np = x1.detach().cpu().numpy().squeeze(0).transpose(1, 2, 0)  # Transpose to channel-last format
+                #
+                #     # Clamp values to [0, 1] range to ensure proper display
+                #     x0_np = x0_np.clip(0, 1)
+                #     x1_np = x1_np.clip(0, 1)
+                #
+                #     # Plotting
+                #     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+                #
+                #     # Display x0
+                #     axs[0].imshow(x0_np)
+                #     axs[0].axis('off')  # Hide axes for better visualization
+                #     axs[0].set_title('x0')
+                #
+                #     # Display action in the middle
+                #     action_name = ACTION_NAMES[a.detach().cpu().item()]  # Get action name
+                #     axs[1].text(0.5, 0.5, action_name, fontsize=15, ha='center')
+                #     axs[1].axis('off')
+                #     axs[1].set_title('Action')
+                #
+                #     # Display x1
+                #     axs[2].imshow(x1_np)
+                #     axs[2].axis('off')
+                #     axs[2].set_title('x1')
+                #
+                #     plt.tight_layout()
+                #     plt.show()
+
+                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = self.feature_extractor_full_model.train_batch(
+                    x0, x1, a)
+                if self.tb_writer is not None:
+                    self.tb_writer.add_scalar('loss', loss_val, self.counter)
+                    self.tb_writer.add_scalar('inv_loss', inv_loss_val, self.counter)
+                    self.tb_writer.add_scalar('ratio_loss', ratio_loss_val, self.counter)
+                    self.tb_writer.add_scalar('pixel_loss', pixel_loss_val, self.counter)
+                self.counter += 1
+                if self.verbose:
+                    print(
+                        f"Updated feature extractor at step {self.counter}, loss {loss_val:.3f}, inv loss: {inv_loss_val:.3f}, ratio loss: {ratio_loss_val:.3f}, pixel loss: {pixel_loss_val:.3f}")
+
+        # self.model_updated_flag = True
+
+        if self.do_plot and self.plot_dir is not None:
+            for config, env in zip(self.env_configs, self.envs):
+                env_path = config['env_file']
+                env_name = env_path.split('/')[-1].split('.')[0]
+                if not os.path.isdir(self.plot_dir):
+                    os.makedirs(self.plot_dir)
+                save_path = os.path.join(self.plot_dir, f"{env_name}-{self.counter}.png")
+                if self.feature_extractor_full_model.decoder is not None:
+                    plot_decoded_images(env, self.feature_extractor_full_model.phi,
+                                        self.feature_extractor_full_model.decoder, save_path, self.device)
+
+                if self.feature_extractor_full_model.n_latent_dims == 2 or self.feature_extractor_full_model.n_latent_dims == 3:
+                    plot_representations(env, self.feature_extractor_full_model.phi, self.feature_extractor_full_model.n_latent_dims, save_path, self.device)
+
+        # initial_checksum = model_checksum(self.feature_extractor_full_model)
+        # print(f"Checksum after this round of training: {initial_checksum}")
+
+        return True
+
+    def get_buffer_size(self):
+        total_size = 0
+        for i, sampler_wrapper in enumerate(self.model.env.envs):
+            # print(f'env {i}: {len(sampler_wrapper.transition_pairs)}')
+            total_size += len(sampler_wrapper.transition_pairs)
+        return total_size
+
+    def get_buffer_obj(self) -> TransitionBuffer:
+        transition_pairs = []
+        for sampler_wrapper in self.model.env.envs:
+            transition_pairs += sampler_wrapper.transition_pairs
+        transition_buffer = TransitionBuffer(transition_pairs)
+        return transition_buffer
+
+    def empty_sampler_buffers(self):
+        for sampler_wrapper in self.model.env.envs:
+            sampler_wrapper.transition_pairs = []

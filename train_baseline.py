@@ -38,4 +38,4 @@ if __name__ == "__main__":
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
     model.learn(total_timesteps=4000000, callback=[test_and_log_callback], progress_bar=True)
-    save_model(model, 0, base_name, save_dir)
+    old_save_model(model, 0, base_name, save_dir)

@@ -1,9 +1,9 @@
+import numpy as np
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-
-from simple_gridworld import SimpleGridWorld
+import math
 
 if __name__ == '__main__':
     import torch
@@ -11,21 +11,35 @@ if __name__ == '__main__':
     from feature_model import FeatureNet
 
     CONFIGS = mix_sampling
-    NUM_ACTIONS = 4
-    LATENT_DIMS = 3
 
+    # model configs
+    NUM_ACTIONS = 4
+    LATENT_DIMS = 8
+    RECONSTRUCT_SIZE = (72, 72)
+    RECONSTRUCT_SCALE = 2
+
+    # sampler configs
     SAMPLE_SIZE = 16384
     SAMPLE_REPLAY_TIME = 4
     MAX_SAMPLE_STEP = 4096
-    BATCH_SIZE = 64
+
+    # train hyperparams
+    WEIGHTS = {
+        'inv': 1.0,
+        'dis': 1.0,
+        'dec': 0.1,
+    }
+    BATCH_SIZE = 256
     LR = 1e-4
-    EPOCHS = 1000
-    SAVE_FREQ = 5
+
+    # train configs
+    EPOCHS = 8000
+    SAVE_FREQ = 1
     TEST_FREQ = 5
 
-    session_name = "learn_feature_3d"
+    session_name = "learn_feature_reconstruct"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, device=device).to(device)
+    model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=RECONSTRUCT_SIZE, initial_scale_factor=RECONSTRUCT_SCALE, device=device).to(device)
 
     from utils import find_latest_checkpoint
     import os
@@ -38,12 +52,12 @@ if __name__ == '__main__':
     # load parameters if it has any
     if latest_checkpoint:
         print(f"Loading model from {latest_checkpoint}")
-        counter, _counter, performance = model.load(latest_checkpoint)
-        counter += 1
-        _counter += 1
+        epoch_counter, step_counter, performance = model.load(latest_checkpoint)
+        epoch_counter += 1
+        step_counter += 1
     else:
-        counter = 0
-        _counter = 0
+        epoch_counter = 0
+        step_counter = 0
         performance = float('inf')
 
     # init tensorboard writer
@@ -52,7 +66,7 @@ if __name__ == '__main__':
     from env_sampler import TransitionBuffer, RandomSampler
     from utils import make_env
 
-    progress_bar = tqdm(range(counter, EPOCHS), desc=f'Training Epoch {counter}')
+    progress_bar = tqdm(range(epoch_counter, EPOCHS), desc=f'Training Epoch {epoch_counter}')
     for i, batch in enumerate(progress_bar):
         sampler = RandomSampler()
         envs = [make_env(config) for config in CONFIGS]
@@ -68,12 +82,18 @@ if __name__ == '__main__':
                 x0 = x0.to(device)
                 a = a.to(device)
                 x1 = x1.to(device)
-                loss_val = model.train_batch(x0, x1, a).detach().cpu().item()
-                tb_writer.add_scalar('loss', loss_val, _counter)
-                _counter += 1
+                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = model.train_batch(x0, x1, a)
+                tb_writer.add_scalar('loss', loss_val, step_counter)
+                tb_writer.add_scalar('inv_loss', inv_loss_val, step_counter)
+                tb_writer.add_scalar('ratio_loss', ratio_loss_val, step_counter)
+                tb_writer.add_scalar('pixel_loss', pixel_loss_val, step_counter)
+                step_counter += 1
 
-        if counter % TEST_FREQ == 0:
+        if epoch_counter % TEST_FREQ == 0:
             encoder = model.phi
+            encoder.eval()
+            decoder = model.decoder
+            decoder.eval()
             for config, env in zip(CONFIGS, envs):
                 env_path = config['env_file']
                 env_name = env_path.split('/')[-1].split('.')[0]
@@ -81,14 +101,72 @@ if __name__ == '__main__':
                 env.iter_reset()
                 # Store z vectors from all iterations
                 z_vectors = []
+                fake_x_imgs = []
+                real_x_imgs = []
                 for observation, terminated, position, connections, reward in env:
                     if observation is not None:
                         observation = torch.unsqueeze(observation, dim=0).to(device)
                         with torch.no_grad():
-                            z = encoder(observation).detach().cpu().numpy()
+                            z = encoder(observation)
+                            fake_x = decoder(z)
+                            z = z.detach().cpu().numpy()
+                            fake_x = fake_x.detach().cpu().numpy()
                             z_vectors.append(z.squeeze(0))
+                            fake_x_imgs.append(fake_x.squeeze(0))
+                            real_x = observation.detach().cpu().numpy()
+                            real_x_imgs.append(real_x.squeeze(0))
 
-                # After collecting all z vectors, plot them based on LATENT_DIMS
+                # plot reconstructed xs:
+                # cannot be used if not using any reconstruction!!!
+                plt.figure()
+                num_xs = len(fake_x_imgs)
+                grid_size = math.ceil(math.sqrt(num_xs))  # Calculate grid size that's as square as possible
+                # Create a figure to hold the grid
+                fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+                # Flatten axes array for easier indexing
+                axes = axes.ravel()
+                for i, img in enumerate(fake_x_imgs):
+                    # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+                    img_transposed = img.transpose((1, 2, 0))
+                    image_clipped = np.clip(img_transposed, 0, 1)
+                    # Plot the image in its subplot
+                    axes[i].imshow(image_clipped)
+                    axes[i].axis('off')  # Hide the axis
+                # Hide any unused subplots if the number of images is not a perfect square
+                for j in range(i + 1, grid_size ** 2):
+                    axes[j].axis('off')
+                plt.tight_layout()
+                img_save_dir = os.path.join(session_name, "saved_decoded_images")
+                if not os.path.isdir(img_save_dir):
+                    os.makedirs(img_save_dir)
+                save_path = os.path.join(img_save_dir, f"{env_name}_reconstructed_{epoch_counter}.png")
+                plt.savefig(save_path, dpi=100, bbox_inches='tight')
+                plt.close(fig)
+                # save original images as well
+                plt.figure()
+                # Create a figure to hold the grid
+                fig, axes = plt.subplots(grid_size, grid_size, figsize=(grid_size * 2, grid_size * 2), dpi=100)
+                # Flatten axes array for easier indexing
+                axes = axes.ravel()
+                for i, img in enumerate(real_x_imgs):
+                    # Transpose the image from [channels, height, width] to [height, width, channels] for plotting
+                    img_transposed = img.transpose((1, 2, 0))
+                    image_clipped = np.clip(img_transposed, 0, 1)
+                    # Plot the image in its subplot
+                    axes[i].imshow(image_clipped)
+                    axes[i].axis('off')  # Hide the axis
+                # Hide any unused subplots if the number of images is not a perfect square
+                for j in range(i + 1, grid_size ** 2):
+                    axes[j].axis('off')
+                plt.tight_layout()
+                img_save_dir = os.path.join(session_name, "saved_decoded_images")
+                if not os.path.isdir(img_save_dir):
+                    os.makedirs(img_save_dir)
+                save_path = os.path.join(img_save_dir, f"{env_name}_original_{epoch_counter}.png")
+                plt.savefig(save_path, dpi=100, bbox_inches='tight')
+                plt.close(fig)
+
+                # plot z vectors based on LATENT_DIMS
                 if LATENT_DIMS == 2:
                     plt.figure(figsize=(8, 8))
                     for z in z_vectors:
@@ -118,14 +196,14 @@ if __name__ == '__main__':
 
                         # Save each view to a different file
                         save_path = os.path.join(img_save_dir,
-                                                 f"{env_name}_latent{LATENT_DIMS}_{counter}_view{i}.png")
+                                                 f"{env_name}_latent{LATENT_DIMS}_{epoch_counter}_view{i}.png")
                         plt.savefig(save_path)
-                        print(f"Saved plot to {save_path}")
+                        # print(f"Saved plot to {save_path}")
 
                     plt.close(fig)  # Close the plot figure after saving all views
 
-        if counter % SAVE_FREQ == 0:
-            model.save(f"{session_name}/model_epoch_{counter}.pth", counter, _counter, performance)
-        counter += 1
+        if epoch_counter % SAVE_FREQ == 0:
+            model.save(f"{session_name}/model_epoch_{epoch_counter}.pth", epoch_counter, step_counter, performance)
+        epoch_counter += 1
         progress_bar.set_description(
-            f'Train Epoch {counter}: Loss: {loss_val:.2f}')
+            f'Train Epoch {epoch_counter}: Loss: {loss_val:.2f}')

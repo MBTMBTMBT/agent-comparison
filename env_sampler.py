@@ -41,3 +41,22 @@ class RandomSampler:
         increased_size = len(self.transition_pairs) - current_size
         new_size = len(self.transition_pairs)
         return increased_size, new_size
+
+
+class SamplerWrapper(gym.Wrapper):
+    def __init__(self, env):
+        super(SamplerWrapper, self).__init__(env)
+        self.env = env
+        self.transition_pairs: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
+        self.current_obs: torch.Tensor or None = None
+
+    def step(self, action):
+        next_obs, reward, terminated, truncated, info = self.env.step(action)
+        self.transition_pairs.append((self.current_obs, torch.tensor(action), torch.tensor(next_obs)))
+        self.current_obs = next_obs
+        return next_obs, reward, terminated, truncated, info
+
+    def reset(self, **kwargs):
+        observation, info = self.env.reset(**kwargs)
+        self.current_obs = observation
+        return observation, info

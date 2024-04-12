@@ -36,7 +36,7 @@ if __name__ == "__main__":
         verbose=1,
     )
 
-    update_env_callback = UpdateEnvCallback(
+    update_env_callback = UpdateAbsEnvCallback(
         train_env_configurations,
         num_clusters_start=40,
         num_clusters_end=40,
@@ -51,4 +51,4 @@ if __name__ == "__main__":
 
     model = PPO("CnnPolicy", env, policy_kwargs={"normalize_images": False}, verbose=1)
     model.learn(total_timesteps=4000000, callback=[test_and_log_callback, update_env_callback], progress_bar=True)
-    save_model(model, 0, base_name, save_dir)
+    old_save_model(model, 0, base_name, save_dir)

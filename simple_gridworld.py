@@ -172,6 +172,8 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self.iter_index = 0
         self.iter_coord = (0, 0)
 
+        self._traj = []
+
     def __len__(self):
         return self.shape[0] * self.shape[1]
 
@@ -179,10 +181,12 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         return self
 
     def __next__(self):
+        temp_agent_position = self.agent_position  # should be helpful for not messing up the coordinates
         if self.iter_index >= len(self):
             raise StopIteration
         row, col = self.iter_coord
         self.agent_position = self.iter_coord
+        temp_iter_coord = self.iter_coord
         col += 1
         if col >= self.shape[1]:
             col = 0
@@ -219,9 +223,11 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                         rewards[action] += rewards[len(ACTION_NAMES)]
             connections = torch.tensor([connections[i] for i in range(len(connections))])
             rewards = torch.tensor([rewards[i] for i in range(len(rewards))])
-            return observation, terminated, self.agent_position, connections, rewards
+            self.agent_position = temp_agent_position
+            return observation, terminated, temp_iter_coord, connections, rewards
 
-        return None, None, self.agent_position, None, None
+        self.agent_position = temp_agent_position
+        return None, None, temp_iter_coord, None, None
 
     def iter_reset(self):
         self.iter_index = 0
@@ -332,9 +338,17 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
         truncated = False
         reward = 5 if self.agent_position == self.goal_position else -1 if (
-                    self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
+                self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
         if hits_wall:
             reward -= 0.1
+
+        if self.grid[self.agent_position] in ['W']:
+            print('traj:', self._traj)
+            print(len(self._traj))
+            print(self.step_count, self.max_steps)
+            print(self.grid)
+            print(self.agent_position, self.grid[self.agent_position])
+            raise AssertionError
 
         self._render_to_surface()
         observation = self.get_observation()
@@ -344,6 +358,9 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             terminated = True
             truncated = True
             reward = 0
+
+        self._traj.append(action)
+        self._traj.append(self.agent_position)
         return observation, reward, terminated, truncated, {"position": self.agent_position}
 
     def reset(self, seed=None, options=None, no_random=False):
@@ -360,6 +377,10 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             self.reset_positions()
         else:
             self.reset_positions(agent_only=True)
+
+        assert self.grid[self.agent_position] not in ['W', 'X', 'G']
+        self._traj = []
+        self._traj.append(self.agent_position)
 
         self._render_to_surface()
         observation = self.get_observation()
@@ -497,7 +518,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
         # cancel randomization
         # start position can still be random
         # self.simple_gridworld._agent_position = self.simple_gridworld.agent_position
-        self.simple_gridworld._goal_position = self.simple_gridworld.goal_position
+        self.simple_gridworld.__goal_position = self.simple_gridworld.goal_position
         self.simple_gridworld.random_traps = 0
         self.simple_gridworld.random = False
         self.reset()
@@ -512,7 +533,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
             deltas = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
             delta = deltas[action]
             new_position = (
-            self.simple_gridworld.agent_position[0] + delta[0], self.simple_gridworld.agent_position[1] + delta[1])
+                self.simple_gridworld.agent_position[0] + delta[0], self.simple_gridworld.agent_position[1] + delta[1])
 
             previous_position = self.simple_gridworld.agent_position
 
