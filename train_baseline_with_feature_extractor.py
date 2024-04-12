@@ -27,7 +27,7 @@ if __name__ == '__main__':
     RECONSTRUCT_SCALE = 4
 
     # sampler configs
-    SAMPLE_SIZE = 16384 * 2
+    SAMPLE_SIZE = 16384
     SAMPLE_REPLAY_TIME = 1
     MAX_SAMPLE_STEP = SAMPLE_SIZE // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME
     VEC_ENV_REPEAT_TIME = 1
