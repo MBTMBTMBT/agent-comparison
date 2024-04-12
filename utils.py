@@ -358,6 +358,8 @@ def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.
     encoder.to(device)
     encoder.eval()
     z_vectors = []
+    # reset iterator before using it
+    iterable_env.iter_reset()
     for observation, terminated, position, connections, reward in iterable_env:
         if observation is not None:
             observation = torch.unsqueeze(observation, dim=0).to(device)
