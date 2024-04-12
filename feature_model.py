@@ -249,9 +249,9 @@ class FeatureNet(torch.nn.Module):
 
     def compute_loss(self, x0, x1, z0, z1, a):
         loss = torch.tensor(0.0).to(self.device)
-        inv_loss = self.inverse_loss(z0, z1, a) if self.weights['inv'] > 0.0 else 0.0
-        ratio_loss = self.ratio_loss(z0, z1) if self.weights['dis'] > 0.0 else 0.0
-        pixel_loss = 0.5 * (self.pixel_loss(x0, z0) + self.pixel_loss(x1, z1)) if self.weights['dec'] > 0.0 else 0.0
+        inv_loss = self.inverse_loss(z0, z1, a) if self.weights['inv'] > 0.0 else torch.tensor(0.0)
+        ratio_loss = self.ratio_loss(z0, z1) if self.weights['dis'] > 0.0 else torch.tensor(0.0)
+        pixel_loss = 0.5 * (self.pixel_loss(x0, z0) + self.pixel_loss(x1, z1)) if self.weights['dec'] > 0.0 else torch.tensor(0.0)
         loss += self.weights['inv'] * inv_loss
         loss += self.weights['dis'] * ratio_loss
         loss += self.weights['dec'] * pixel_loss
