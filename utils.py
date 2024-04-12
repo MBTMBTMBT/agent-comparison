@@ -663,7 +663,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                 env_name = env_path.split('/')[-1].split('.')[0]
                 if not os.path.isdir(self.plot_dir):
                     os.makedirs(self.plot_dir)
-                save_path = os.path.join(self.plot_dir, f"{env_name}{self.counter}.png")
+                save_path = os.path.join(self.plot_dir, f"{env_name}-{self.counter}.png")
                 if self.feature_extractor_full_model.decoder is not None:
                     plot_decoded_images(env, self.feature_extractor_full_model.phi,
                                         self.feature_extractor_full_model.decoder, save_path, self.device)
