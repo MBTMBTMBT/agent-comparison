@@ -655,7 +655,7 @@ class UpdateFeatureExtractorCallback(BaseCallback):
 
         # self.model_updated_flag = True
 
-        if self.do_plot and self.plot_dir is not None:
+        if self.do_plot and self.plot_dir is not None and self.feature_extractor_full_model.decoder is not None:
             for config, env in zip(self.env_configs, self.envs):
                 env_path = config['env_file']
                 env_name = env_path.split('/')[-1].split('.')[0]

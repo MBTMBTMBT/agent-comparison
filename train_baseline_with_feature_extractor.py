@@ -168,15 +168,17 @@ if __name__ == '__main__':
             feature_extractor.save(_save_name, epoch_counter, feature_extractor_step_counter, performance)
             _save_counter = __save_counter
 
-            _plot_dir = os.path.join(session_name, 'plots')
-            for config, env in zip(TRAIN_CONFIGS, envs):
-                env_path = config['env_file']
-                env_name = env_path.split('/')[-1].split('.')[0]
-                if not os.path.isdir(_plot_dir):
-                    os.makedirs(_plot_dir)
-                save_path = os.path.join(_plot_dir, f"{env_name}{feature_extractor_step_counter}.png")
-                plot_decoded_images(env, feature_extractor.phi,
-                                    feature_extractor.decoder, save_path, device)
+            if feature_extractor.decoder is not None:
+                _plot_dir = os.path.join(session_name, 'plots')
+                for config, env in zip(TRAIN_CONFIGS, envs):
+                    env_path = config['env_file']
+                    env_name = env_path.split('/')[-1].split('.')[0]
+                    if not os.path.isdir(_plot_dir):
+                        os.makedirs(_plot_dir)
+                    save_path = os.path.join(_plot_dir, f"{env_name}{feature_extractor_step_counter}.png")
+
+                    plot_decoded_images(env, feature_extractor.phi,
+                                        feature_extractor.decoder, save_path, device)
 
     pbar.close()
 
@@ -212,7 +214,8 @@ if __name__ == '__main__':
     # make model
     model = PPO("MlpPolicy", env, n_steps=MAX_SAMPLE_STEP, verbose=1, policy_kwargs={
         'features_extractor_class': CustomFeatureExtractor,
-        'features_extractor_kwargs': {'feature_extractor': temp_feature_extractor, 'features_dim': LATENT_DIMS, 'device': device}
+        'features_extractor_kwargs': {'feature_extractor': temp_feature_extractor, 'features_dim': LATENT_DIMS,
+                                      'device': device}
     })
 
     # Restore the original parameters to the feature extractor
@@ -234,19 +237,19 @@ if __name__ == '__main__':
         # get callbacks
         step_counter_callback = StepCounterCallback(init_counter_val=agent_step_counter)
         update_feature_extractor_callback = UpdateFeatureExtractorCallback(
-                    feature_extractor,
-                    env_configurations=TRAIN_CONFIGS,
-                    buffer_size_to_train=SAMPLE_SIZE,
-                    sample_rate=SAMPLE_RATE,
-                    replay_times=SAMPLE_REPLAY_TIME,
-                    batch_size=BATCH_SIZE,
-                    verbose=0,
-                    plot_dir=os.path.join(session_name, 'plots'),
-                    device=device,
-                    tb_writer=tb_writer,
-                    counter=feature_extractor_step_counter,
-                    # show_progress_bar=False,
-            )
+            feature_extractor,
+            env_configurations=TRAIN_CONFIGS,
+            buffer_size_to_train=SAMPLE_SIZE,
+            sample_rate=SAMPLE_RATE,
+            replay_times=SAMPLE_REPLAY_TIME,
+            batch_size=BATCH_SIZE,
+            verbose=0,
+            plot_dir=os.path.join(session_name, 'plots'),
+            device=device,
+            tb_writer=tb_writer,
+            counter=feature_extractor_step_counter,
+            # show_progress_bar=False,
+        )
         test_and_log_callback = TestAndLogCallback(
             EVAL_CONFIGS,
             session_name,
@@ -267,7 +270,8 @@ if __name__ == '__main__':
         agent_step_counter = step_counter_callback.step_count
         feature_extractor_step_counter = update_feature_extractor_callback.counter
 
-        save_model(model, num_epoch=epoch_counter, num_step=agent_step_counter, base_name=baseline_model_name, save_dir=session_name)
+        save_model(model, num_epoch=epoch_counter, num_step=agent_step_counter, base_name=baseline_model_name,
+                   save_dir=session_name)
 
         _save_name = f"{session_name}/{feature_model_name}_{feature_extractor_step_counter}.pth"
         print(f"Model save to {_save_name}")
