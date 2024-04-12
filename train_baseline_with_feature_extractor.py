@@ -17,33 +17,33 @@ if __name__ == '__main__':
     from functools import partial
     from stable_baselines3.common.env_util import DummyVecEnv
 
-    TRAIN_CONFIGS = maze13_sampling
-    EVAL_CONFIGS = maze13_sampling
+    TRAIN_CONFIGS = maze13_sampling_rand
+    EVAL_CONFIGS = maze13_sampling_rand
 
     # model configs
     NUM_ACTIONS = 4
-    LATENT_DIMS = 2
+    LATENT_DIMS = 64
     RECONSTRUCT_SIZE = (96, 96)
-    RECONSTRUCT_SCALE = 4
+    RECONSTRUCT_SCALE = 2
 
     # sampler configs
     SAMPLE_SIZE = 16384
     SAMPLE_REPLAY_TIME = 1
     MAX_SAMPLE_STEP = SAMPLE_SIZE // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME
     VEC_ENV_REPEAT_TIME = 1
-    SAMPLE_RATE = 0.5  # not for pre-training
+    SAMPLE_RATE = 1.0  # not for pre-training
 
     # train hyperparams
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
-        'dec': 0.0,
+        'dec': 1.0,
     }
     BATCH_SIZE = 32
     LR = 1e-4
 
     # train configs
-    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 50
+    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 200
     SAVE_FREQ = PRE_TRAIN_STEPS // 5
 
     EPOCHS = 1000
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     NUM_EVAL_EPISODES = 10
     EVAL_FREQ = NUM_STEPS_PER_EPOCH // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME // 5
 
-    session_name = "ppo_feature_extractor"
+    session_name = "ppo_feature_extractor_maze13_64d"
     feature_model_name = 'feature_model_step'
     baseline_model_name = 'baseline_model'
 
@@ -174,7 +174,7 @@ if __name__ == '__main__':
                 env_name = env_path.split('/')[-1].split('.')[0]
                 if not os.path.isdir(_plot_dir):
                     os.makedirs(_plot_dir)
-                save_path = os.path.join(_plot_dir, f"{env_name}{feature_extractor_step_counter}.png")
+                save_path = os.path.join(_plot_dir, f"{env_name}-{feature_extractor_step_counter}.png")
 
                 if feature_extractor.decoder is not None:
                     plot_decoded_images(env, feature_extractor.phi,
