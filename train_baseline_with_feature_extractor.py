@@ -43,7 +43,7 @@ if __name__ == '__main__':
     LR = 1e-4
 
     # train configs
-    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 200
+    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 50
     SAVE_FREQ = PRE_TRAIN_STEPS // 5
 
     EPOCHS = 1000
