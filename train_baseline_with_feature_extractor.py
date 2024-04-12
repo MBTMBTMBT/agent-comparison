@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     feature_extractor = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=RECONSTRUCT_SIZE,
-                                   initial_scale_factor=RECONSTRUCT_SCALE, device=device).to(device)
+                                   initial_scale_factor=RECONSTRUCT_SCALE, weights=WEIGHTS, device=device).to(device)
 
     if not os.path.isdir(session_name):
         os.makedirs(session_name)
@@ -211,7 +211,7 @@ if __name__ == '__main__':
 
     # get a temporary feature extractor
     temp_feature_extractor = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=RECONSTRUCT_SIZE,
-                                        initial_scale_factor=RECONSTRUCT_SCALE, device=device).to(device)
+                                        initial_scale_factor=RECONSTRUCT_SCALE, weights=WEIGHTS, device=device).to(device)
 
     # make model
     model = PPO("MlpPolicy", env, n_steps=MAX_SAMPLE_STEP, verbose=1, policy_kwargs={

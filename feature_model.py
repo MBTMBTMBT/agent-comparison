@@ -200,7 +200,7 @@ class FeatureNet(torch.nn.Module):
                 img_channels=3,
                 img_size=img_size,
                 initial_scale_factor=initial_scale_factor,
-            )
+            ).to(device)
         else:
             self.decoder = None
 
@@ -208,6 +208,7 @@ class FeatureNet(torch.nn.Module):
         self.bce_loss = torch.nn.BCELoss().to(device)
         self.mse = torch.nn.MSELoss().to(device)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        pass
 
     def inverse_loss(self, z0, z1, a):
         a_hat = self.inv_model(z0, z1)
