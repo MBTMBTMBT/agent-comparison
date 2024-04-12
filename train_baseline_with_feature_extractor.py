@@ -38,8 +38,9 @@ if __name__ == '__main__':
         'inv': 1.0,
         'dis': 1.0,
         'dec': 1.0,
+        'rwd': 1.0,
     }
-    BATCH_SIZE = 32
+    BATCH_SIZE = 128
     LR = 1e-4
 
     # train configs
@@ -99,10 +100,11 @@ if __name__ == '__main__':
         loss_val = 0.0
         for _ in range(SAMPLE_REPLAY_TIME):
             # __counter = 0
-            for x0, a, x1 in dataloader:
+            for x0, a, x1, r in dataloader:
                 x0 = x0.to(device)
                 a = a.to(device)
                 x1 = x1.to(device)
+                r = r.to(device)
 
                 # if __counter < 20:
                 #     __counter += 1
@@ -144,15 +146,16 @@ if __name__ == '__main__':
                 #     plt.tight_layout()
                 #     plt.show()
 
-                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = feature_extractor.train_batch(x0, x1, a)
+                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val, reward_loss_val = feature_extractor.train_batch(x0, x1, a, r)
                 tb_writer.add_scalar('loss', loss_val, feature_extractor_step_counter)
                 tb_writer.add_scalar('inv_loss', inv_loss_val, feature_extractor_step_counter)
                 tb_writer.add_scalar('ratio_loss', ratio_loss_val, feature_extractor_step_counter)
                 tb_writer.add_scalar('pixel_loss', pixel_loss_val, feature_extractor_step_counter)
+                tb_writer.add_scalar('reward_loss', reward_loss_val, feature_extractor_step_counter)
 
                 # Update the progress bar description with the latest loss values
                 pbar.set_description(
-                    f"Loss:{loss_val:.3f}-Inv:{inv_loss_val:.3f}-Ratio:{ratio_loss_val:.3f}-Pixel:{pixel_loss_val:.3f}")
+                    f"L:{loss_val:.3f}-Inv:{inv_loss_val:.3f}-Rat:{ratio_loss_val:.3f}-Pix:{pixel_loss_val:.3f}-Rwd:{reward_loss_val:.3f}")
                 pbar.update(1)  # Assuming each batch represents a single step, adjust as necessary
 
                 feature_extractor_step_counter += 1

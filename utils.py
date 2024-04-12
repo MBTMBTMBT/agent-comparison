@@ -598,10 +598,11 @@ class UpdateFeatureExtractorCallback(BaseCallback):
         # dataloader = DataLoader(transition_buffer, batch_size=1, shuffle=True)
         # __counter = 0
         for _ in range(self.replay_times):
-            for x0, a, x1 in dataloader:
+            for x0, a, x1, r in dataloader:
                 x0 = x0.to(self.device)
                 a = a.to(self.device)
                 x1 = x1.to(self.device)
+                r = r.to(self.device)
 
                 # if __counter < 5:
                 #     __counter += 1
@@ -643,17 +644,16 @@ class UpdateFeatureExtractorCallback(BaseCallback):
                 #     plt.tight_layout()
                 #     plt.show()
 
-                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = self.feature_extractor_full_model.train_batch(
-                    x0, x1, a)
+                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val, reward_loss_val = self.feature_extractor_full_model.train_batch(x0, x1, a, r)
                 if self.tb_writer is not None:
                     self.tb_writer.add_scalar('loss', loss_val, self.counter)
                     self.tb_writer.add_scalar('inv_loss', inv_loss_val, self.counter)
                     self.tb_writer.add_scalar('ratio_loss', ratio_loss_val, self.counter)
                     self.tb_writer.add_scalar('pixel_loss', pixel_loss_val, self.counter)
+                    self.tb_writer.add_scalar('reward_loss', reward_loss_val, self.counter)
                 self.counter += 1
                 if self.verbose:
-                    print(
-                        f"Updated feature extractor at step {self.counter}, loss {loss_val:.3f}, inv loss: {inv_loss_val:.3f}, ratio loss: {ratio_loss_val:.3f}, pixel loss: {pixel_loss_val:.3f}")
+                    print(f"L:{loss_val:.3f}-Inv:{inv_loss_val:.3f}-Rat:{ratio_loss_val:.3f}-Pix:{pixel_loss_val:.3f}-Rwd:{reward_loss_val:.3f}")
 
         # self.model_updated_flag = True
 

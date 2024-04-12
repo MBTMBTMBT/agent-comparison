@@ -1,6 +1,6 @@
-from collections import defaultdict
 import torch
 import torch.nn
+import torch.nn.functional as F
 
 
 class SimpleCNN(torch.nn.Module):
@@ -98,6 +98,32 @@ class FlexibleImageDecoder(torch.nn.Module):
         return img
 
 
+class RewardPredictor(torch.nn.Module):
+    def __init__(self, n_actions, n_latent_dims=4, n_hidden_layers=1, n_units_per_layer=32):
+        super().__init__()
+        self.n_actions = n_actions
+
+        self.layers = []
+        if n_hidden_layers == 0:
+            self.layers.extend([torch.nn.Linear(2 * n_latent_dims + n_actions, 1)])
+        else:
+            self.layers.extend(
+                [torch.nn.Linear(2 * n_latent_dims + n_actions, n_units_per_layer),
+                 torch.nn.LeakyReLU(inplace=True),])
+            self.layers.extend(
+                [torch.nn.Linear(n_units_per_layer, n_units_per_layer),
+                 torch.nn.LeakyReLU(inplace=True),] * (n_hidden_layers - 1))
+            self.layers.extend([torch.nn.Linear(n_units_per_layer, 1)])
+
+        self.reward_predictor = torch.nn.Sequential(*self.layers)
+
+    def forward(self, z0, z1, a):
+        a_logits = F.one_hot(a, num_classes=self.n_actions).float()
+        context = torch.cat((z0, z1, a_logits), -1)
+        reward = self.reward_predictor(context).squeeze(-1)
+        return reward
+
+
 class InvNet(torch.nn.Module):
     def __init__(self, n_actions, n_latent_dims=4, n_hidden_layers=1, n_units_per_layer=32):
         super().__init__()
@@ -163,7 +189,7 @@ class FeatureNet(torch.nn.Module):
     ):
         super().__init__()
         if weights is None:
-            weights = {'inv': 1.0, 'dis': 1.0, 'dec': 0.1, }
+            weights = {'inv': 1.0, 'dis': 1.0, 'dec': 0.1, 'rwd': 0.1,}
         self.n_actions = n_actions
         self.n_latent_dims = n_latent_dims
         self.n_units_per_layer = n_units_per_layer
@@ -203,10 +229,20 @@ class FeatureNet(torch.nn.Module):
             ).to(device)
         else:
             self.decoder = None
+        if weights['rwd'] > 0.0:
+            self.reward_predictor = RewardPredictor(
+                n_actions=n_actions,
+                n_latent_dims=n_latent_dims,
+                n_units_per_layer=n_units_per_layer,
+                n_hidden_layers=n_hidden_layers,
+            ).to(device)
+        else:
+            self.reward_predictor = None
 
         self.cross_entropy = torch.nn.CrossEntropyLoss().to(device)
         self.bce_loss = torch.nn.BCELoss().to(device)
         self.mse = torch.nn.MSELoss().to(device)
+        self.mae = torch.nn.L1Loss().to(device)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         pass
 
@@ -237,7 +273,11 @@ class FeatureNet(torch.nn.Module):
         if x.size() != fake_x.size():
             x = torch.nn.functional.interpolate(x, size=fake_x.size()[2:], mode='bilinear', align_corners=False)
 
-        return self.mse(fake_x, x)
+        return self.mae(fake_x, x)
+
+    def reward_loss(self, z0, z1, a, r):
+        reward_pred = self.reward_predictor(z0, z1, a)
+        return self.mae(reward_pred, r)
 
     def forward(self, x):
         return self.phi(x)
@@ -247,27 +287,29 @@ class FeatureNet(torch.nn.Module):
         # a_logits = self.inv_model(z0, z1)
         # return torch.argmax(a_logits, dim=-1)
 
-    def compute_loss(self, x0, x1, z0, z1, a):
+    def compute_loss(self, x0, x1, z0, z1, a, r):
         loss = torch.tensor(0.0).to(self.device)
         inv_loss = self.inverse_loss(z0, z1, a) if self.weights['inv'] > 0.0 else torch.tensor(0.0)
         ratio_loss = self.ratio_loss(z0, z1) if self.weights['dis'] > 0.0 else torch.tensor(0.0)
         pixel_loss = 0.5 * (self.pixel_loss(x0, z0) + self.pixel_loss(x1, z1)) if self.weights['dec'] > 0.0 else torch.tensor(0.0)
+        reward_loss = self.reward_loss(z0, z1, a, r) if self.weights['rwd'] > 0.0 else torch.tensor(0.0)
         loss += self.weights['inv'] * inv_loss
         loss += self.weights['dis'] * ratio_loss
         loss += self.weights['dec'] * pixel_loss
-        return loss, inv_loss, ratio_loss, pixel_loss
+        loss += self.weights['rwd'] * reward_loss
+        return loss, inv_loss, ratio_loss, pixel_loss, reward_loss
 
-    def train_batch(self, x0, x1, a):
+    def train_batch(self, x0, x1, a, r):
         self.train()
         self.phi.train()
         self.optimizer.zero_grad()
         z0 = self.phi(x0)
         z1 = self.phi(x1)
         # z1_hat = self.fwd_model(z0, a)
-        loss, inv_loss, ratio_loss, pixel_loss = self.compute_loss(x0, x1, z0, z1, a)
+        loss, inv_loss, ratio_loss, pixel_loss, reward_loss = self.compute_loss(x0, x1, z0, z1, a, r)
         loss.backward()
         self.optimizer.step()
-        return loss.detach().cpu().item(), inv_loss.detach().cpu().item(), ratio_loss.detach().cpu().item(), pixel_loss.detach().cpu().item()
+        return loss.detach().cpu().item(), inv_loss.detach().cpu().item(), ratio_loss.detach().cpu().item(), pixel_loss.detach().cpu().item(), reward_loss.detach().cpu().item()
 
     def save(self, checkpoint_path, counter=-1, _counter=-1, performance=0.0):
         torch.save(
@@ -278,6 +320,7 @@ class FeatureNet(torch.nn.Module):
                 'inv_model': self.inv_model.state_dict() if self.weights['inv'] > 0.0 else None,
                 'discriminator': self.discriminator.state_dict() if self.weights['dis'] > 0.0 else None,
                 'decoder': self.decoder.state_dict() if self.weights['dec'] > 0.0 else None,
+                'reward_predictor': self.reward_predictor.state_dict() if self.weights['rwd'] > 0.0 else None,
                 'optimizer': self.optimizer.state_dict(),
                 'performance': performance,
                 'weights': self.weights,
@@ -295,5 +338,7 @@ class FeatureNet(torch.nn.Module):
             self.discriminator.load_state_dict(checkpoint['discriminator'])
         if weights['dec'] > 0.0:
             self.decoder.load_state_dict(checkpoint['decoder'])
+        if weights['rwd'] > 0.0:
+            self.reward_predictor.load_state_dict(checkpoint['reward_predictor'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         return checkpoint['counter'], checkpoint['_counter'], checkpoint['performance']
