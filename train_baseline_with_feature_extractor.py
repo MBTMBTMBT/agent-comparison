@@ -17,12 +17,12 @@ if __name__ == '__main__':
     from functools import partial
     from stable_baselines3.common.env_util import DummyVecEnv
 
-    TRAIN_CONFIGS = mix_sampling
-    EVAL_CONFIGS = mix_sampling_eval
+    TRAIN_CONFIGS = maze13_sampling
+    EVAL_CONFIGS = maze13_sampling
 
     # model configs
     NUM_ACTIONS = 4
-    LATENT_DIMS = 16
+    LATENT_DIMS = 2
     RECONSTRUCT_SIZE = (96, 96)
     RECONSTRUCT_SCALE = 4
 
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
-        'dec': 1.0,
+        'dec': 0.0,
     }
     BATCH_SIZE = 32
     LR = 1e-4
@@ -168,17 +168,19 @@ if __name__ == '__main__':
             feature_extractor.save(_save_name, epoch_counter, feature_extractor_step_counter, performance)
             _save_counter = __save_counter
 
-            if feature_extractor.decoder is not None:
-                _plot_dir = os.path.join(session_name, 'plots')
-                for config, env in zip(TRAIN_CONFIGS, envs):
-                    env_path = config['env_file']
-                    env_name = env_path.split('/')[-1].split('.')[0]
-                    if not os.path.isdir(_plot_dir):
-                        os.makedirs(_plot_dir)
-                    save_path = os.path.join(_plot_dir, f"{env_name}{feature_extractor_step_counter}.png")
+            _plot_dir = os.path.join(session_name, 'plots')
+            for config, env in zip(TRAIN_CONFIGS, envs):
+                env_path = config['env_file']
+                env_name = env_path.split('/')[-1].split('.')[0]
+                if not os.path.isdir(_plot_dir):
+                    os.makedirs(_plot_dir)
+                save_path = os.path.join(_plot_dir, f"{env_name}{feature_extractor_step_counter}.png")
 
+                if feature_extractor.decoder is not None:
                     plot_decoded_images(env, feature_extractor.phi,
                                         feature_extractor.decoder, save_path, device)
+                if LATENT_DIMS == 2 or LATENT_DIMS == 3:
+                    plot_representations(env, feature_extractor.phi, LATENT_DIMS, save_path, device)
 
     pbar.close()
 

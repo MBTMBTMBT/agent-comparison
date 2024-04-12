@@ -655,15 +655,19 @@ class UpdateFeatureExtractorCallback(BaseCallback):
 
         # self.model_updated_flag = True
 
-        if self.do_plot and self.plot_dir is not None and self.feature_extractor_full_model.decoder is not None:
+        if self.do_plot and self.plot_dir is not None:
             for config, env in zip(self.env_configs, self.envs):
                 env_path = config['env_file']
                 env_name = env_path.split('/')[-1].split('.')[0]
                 if not os.path.isdir(self.plot_dir):
                     os.makedirs(self.plot_dir)
                 save_path = os.path.join(self.plot_dir, f"{env_name}{self.counter}.png")
-                plot_decoded_images(env, self.feature_extractor_full_model.phi,
-                                    self.feature_extractor_full_model.decoder, save_path, self.device)
+                if self.feature_extractor_full_model.decoder is not None:
+                    plot_decoded_images(env, self.feature_extractor_full_model.phi,
+                                        self.feature_extractor_full_model.decoder, save_path, self.device)
+
+                if self.feature_extractor_full_model.n_latent_dims == 2 or self.feature_extractor_full_model.n_latent_dims == 3:
+                    plot_representations(env, self.feature_extractor_full_model.phi, self.feature_extractor_full_model.n_latent_dims, save_path, self.device)
 
         # initial_checksum = model_checksum(self.feature_extractor_full_model)
         # print(f"Checksum after this round of training: {initial_checksum}")
