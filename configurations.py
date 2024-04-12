@@ -584,6 +584,21 @@ maze13_sampling = [
         "agent_position": None,
         "goal_position": (2, 10),
         "num_random_traps": 0,
+        "make_random": False,
+        "max_steps": 4096,
+        "num_clusters": 48,
+    },
+]
+
+maze13_sampling_rand = [
+    {
+        "env_type": "SimpleGridworld",
+        "env_file": "envs/simple_grid/gridworld-maze-13.txt",
+        "cell_size": None,
+        "obs_size": None,
+        "agent_position": None,
+        "goal_position": None,
+        "num_random_traps": 0,
         "make_random": True,
         "max_steps": 4096,
         "num_clusters": 48,
