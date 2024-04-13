@@ -201,7 +201,10 @@ if __name__ == '__main__':
     for _ in range(VEC_ENV_REPEAT_TIME):
         train_env_configurations += _train_env_configurations
 
-    env_fns = [partial(make_env, config, SamplerWrapper) for config in train_env_configurations]
+    if not USE_CNN_DECODER:
+        env_fns = [partial(make_env, config, SamplerWrapper) for config in train_env_configurations]
+    else:
+        env_fns = [partial(make_env, config) for config in train_env_configurations]
     env = DummyVecEnv(env_fns)
 
     # Check for the latest saved model
