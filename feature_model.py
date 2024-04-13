@@ -290,7 +290,7 @@ class FeatureNet(torch.nn.Module):
         if x.size() != fake_x.size():
             x = torch.nn.functional.interpolate(x, size=fake_x.size()[2:], mode='bilinear', align_corners=False)
 
-        return self.mse(fake_x, x) + self.perceptual(fake_x, x)
+        return self.mse(fake_x, x)  # + self.perceptual(fake_x, x)
 
     def reward_loss(self, z0, z1, a, r):
         reward_pred = self.reward_predictor(z0, z1, a)
