@@ -1,6 +1,7 @@
 import torch
 import torch.nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 
 class SimpleCNN(torch.nn.Module):
@@ -174,6 +175,21 @@ class ContrastiveNet(torch.nn.Module):
         return fakes
 
 
+class PerceptualLoss(torch.nn.Module):
+    def __init__(self):
+        super(PerceptualLoss, self).__init__()
+        vgg = models.vgg16(pretrained=True).features[:23]
+        self.vgg = vgg.eval()
+        for param in self.vgg.parameters():
+            param.requires_grad = False
+
+    def forward(self, input, target):
+        vgg_input_features = self.vgg(input)
+        vgg_target_features = self.vgg(target)
+        return torch.nn.functional.mse_loss(vgg_input_features, vgg_target_features)
+
+
+
 class FeatureNet(torch.nn.Module):
     def __init__(
             self,
@@ -243,6 +259,7 @@ class FeatureNet(torch.nn.Module):
         self.bce_loss = torch.nn.BCELoss().to(device)
         self.mse = torch.nn.MSELoss().to(device)
         self.mae = torch.nn.L1Loss().to(device)
+        self.perceptual = PerceptualLoss().to(device)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         pass
 
@@ -273,11 +290,11 @@ class FeatureNet(torch.nn.Module):
         if x.size() != fake_x.size():
             x = torch.nn.functional.interpolate(x, size=fake_x.size()[2:], mode='bilinear', align_corners=False)
 
-        return self.mae(fake_x, x)
+        return self.mse(fake_x, x) + self.perceptual(fake_x, x)
 
     def reward_loss(self, z0, z1, a, r):
         reward_pred = self.reward_predictor(z0, z1, a)
-        return self.mae(reward_pred, r)
+        return self.mse(reward_pred, r)
 
     def forward(self, x):
         return self.phi(x)

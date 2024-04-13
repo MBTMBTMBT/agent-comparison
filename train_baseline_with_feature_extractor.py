@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     # model configs
     NUM_ACTIONS = 4
-    LATENT_DIMS = 64
+    LATENT_DIMS = 2
     RECONSTRUCT_SIZE = (96, 96)
     RECONSTRUCT_SCALE = 2
 
@@ -37,24 +37,24 @@ if __name__ == '__main__':
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
-        'dec': 1.0,
-        'rwd': 1.0,
+        'dec': 0.0,
+        'rwd': 0.0,
     }
-    BATCH_SIZE = 128
+    BATCH_SIZE = 32
     LR = 1e-4
 
     # train configs
-    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 200
+    PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 0
     SAVE_FREQ = PRE_TRAIN_STEPS // 5
 
-    EPOCHS = 1000
+    EPOCHS = 20
     NUM_STEPS_PER_EPOCH = MAX_SAMPLE_STEP * len(TRAIN_CONFIGS) * SAMPLE_REPLAY_TIME * 20
 
     # eval configs
     NUM_EVAL_EPISODES = 10
     EVAL_FREQ = NUM_STEPS_PER_EPOCH // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME // 5
 
-    session_name = "ppo_feature_extractor_maze13_64d"
+    session_name = "ppo_feature_extractor_maze13_2d"
     feature_model_name = 'feature_model_step'
     baseline_model_name = 'baseline_model'
 
