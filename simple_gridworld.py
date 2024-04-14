@@ -1,5 +1,6 @@
 import collections
 import random
+from itertools import product
 
 import gymnasium
 import matplotlib.pyplot as plt
@@ -9,7 +10,6 @@ import pygame
 import torch
 from gymnasium import spaces
 from torchvision.transforms import transforms
-from itertools import product
 
 ACTION_NAMES = {
     0: 'UP',
@@ -135,7 +135,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
     def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None,
-                 random_traps=0, make_random=False, max_steps=128):
+                 random_traps=0, make_random=False, max_steps=128, compute_optimal=False, ):
         super(SimpleGridWorld, self).__init__()
         self.random = make_random
         self.max_steps = max_steps
@@ -176,6 +176,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         self.value_grid = np.zeros_like(self.grid, dtype=np.float32)
         self.optimal_policy = np.zeros_like(self.grid, dtype=np.uint8)
+        self.compute_optimal_policy = compute_optimal
 
     def __len__(self):
         return self.shape[0] * self.shape[1]
@@ -364,7 +365,10 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         self._traj.append(action)
         self._traj.append(self.agent_position)
-        return observation, reward, terminated, truncated, {"position": self.agent_position}
+        return observation, reward, terminated, truncated, {"position": self.agent_position,
+                                                            "goal_position": self.goal_position,
+                                                            "optimal_policy": self.optimal_policy[
+                                                                self.agent_position].item()}
 
     def reset(self, seed=None, options=None, no_random=False):
         super().reset(seed=seed)
@@ -391,7 +395,13 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         observation = self.get_observation()
         observation = torch.tensor(observation).permute(2, 0, 1).type(torch.float32)
         observation /= 255.0 if observation.max() > 1.0 else 1.0
-        return observation, {"position": self.agent_position}
+
+        # get optimal policy
+        if self.compute_optimal_policy:
+            self.update_value_and_optimal_policy()
+
+        return observation, {"position": self.agent_position, "goal_position": self.goal_position,
+                             "optimal_policy": self.optimal_policy[self.agent_position].item()}
 
     def get_observation(self):
         observation = pygame.surfarray.array3d(self.cached_surface)
@@ -538,7 +548,6 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
             if delta < threshold:
                 break
-
 
     def get_optimal_policy_str(self):
         policy_map = ''
@@ -722,7 +731,7 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 if __name__ == "__main__":
     env = SimpleGridWorld('envs/simple_grid/gridworld-maze-13.txt', make_random=True, random_traps=0,
-                          agent_position=None, goal_position=(1, 8), max_steps=1024,)
+                          agent_position=None, goal_position=(1, 8), max_steps=1024, )
     obs, info = env.reset()
     env.update_value_and_optimal_policy()
     print('optimal policy:')
