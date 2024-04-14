@@ -110,10 +110,10 @@ class RewardPredictor(torch.nn.Module):
         else:
             self.layers.extend(
                 [torch.nn.Linear(2 * n_latent_dims + n_actions, n_units_per_layer),
-                 torch.nn.LeakyReLU(inplace=True),])
+                 torch.nn.LeakyReLU(inplace=True), ])
             self.layers.extend(
                 [torch.nn.Linear(n_units_per_layer, n_units_per_layer),
-                 torch.nn.LeakyReLU(inplace=True),] * (n_hidden_layers - 1))
+                 torch.nn.LeakyReLU(inplace=True), ] * (n_hidden_layers - 1))
             self.layers.extend([torch.nn.Linear(n_units_per_layer, 1)])
 
         self.reward_predictor = torch.nn.Sequential(*self.layers)
@@ -189,7 +189,6 @@ class PerceptualLoss(torch.nn.Module):
         return torch.nn.functional.mse_loss(vgg_input_features, vgg_target_features)
 
 
-
 class FeatureNet(torch.nn.Module):
     def __init__(
             self,
@@ -205,7 +204,7 @@ class FeatureNet(torch.nn.Module):
     ):
         super().__init__()
         if weights is None:
-            weights = {'inv': 1.0, 'dis': 1.0, 'dec': 0.1, 'rwd': 0.1,}
+            weights = {'inv': 1.0, 'dis': 1.0, 'dec': 0.1, 'rwd': 0.1, 'demo': 1.0, }
         self.n_actions = n_actions
         self.n_latent_dims = n_latent_dims
         self.n_units_per_layer = n_units_per_layer
@@ -282,6 +281,9 @@ class FeatureNet(torch.nn.Module):
         fakes = self.discriminator(z0_extended, z1_pos_neg)
         return self.bce_loss(input=fakes, target=is_fake.float())
 
+    def demo_loss(self, z0, z1, same_optimal_policy: torch.Tensor):
+        return self.mse(torch.mul(z0, same_optimal_policy.view(z0.shape[0], 1, 1)), torch.mul(z1, same_optimal_policy.view(z0.shape[0], 1, 1)))
+
     def pixel_loss(self, x, z):
         self.decoder.train()
         fake_x = self.decoder(z)
@@ -304,16 +306,22 @@ class FeatureNet(torch.nn.Module):
         # a_logits = self.inv_model(z0, z1)
         # return torch.argmax(a_logits, dim=-1)
 
-    def compute_loss(self, x0, x1, z0, z1, a, r):
+    def compute_loss(self, x0, x1, z0, z1, a, r, d=None):
         loss = torch.tensor(0.0).to(self.device)
         inv_loss = self.inverse_loss(z0, z1, a) if self.weights['inv'] > 0.0 else torch.tensor(0.0)
         ratio_loss = self.ratio_loss(z0, z1) if self.weights['dis'] > 0.0 else torch.tensor(0.0)
-        pixel_loss = 0.5 * (self.pixel_loss(x0, z0) + self.pixel_loss(x1, z1)) if self.weights['dec'] > 0.0 else torch.tensor(0.0)
+        pixel_loss = 0.5 * (self.pixel_loss(x0, z0) + self.pixel_loss(x1, z1)) if self.weights[
+                                                                                      'dec'] > 0.0 else torch.tensor(
+            0.0)
         reward_loss = self.reward_loss(z0, z1, a, r) if self.weights['rwd'] > 0.0 else torch.tensor(0.0)
         loss += self.weights['inv'] * inv_loss
         loss += self.weights['dis'] * ratio_loss
         loss += self.weights['dec'] * pixel_loss
         loss += self.weights['rwd'] * reward_loss
+        if d is not None:
+            demo_loss = self.demo_loss(z0, z1, d) if self.weights['demo'] > 0.0 else torch.tensor(0.0)
+            loss += self.weights['demo'] * demo_loss
+            return loss, inv_loss, ratio_loss, pixel_loss, reward_loss, demo_loss
         return loss, inv_loss, ratio_loss, pixel_loss, reward_loss
 
     def train_batch(self, x0, x1, a, r):
