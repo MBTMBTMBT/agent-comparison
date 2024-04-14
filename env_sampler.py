@@ -17,14 +17,15 @@ class TransitionBuffer(Dataset):
 
 
 class RandomSampler:
-    def __init__(self) -> None:
+    def __init__(self, compute_optimal=False) -> None:
         self.transition_pairs: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] or list[
             tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] = []
+        self.compute_optimal = compute_optimal
 
-    def sample(self, env: gym.Env, max_step=4096, compute_optimal=False) -> tuple[int, int]:
+    def sample(self, env: gym.Env, max_step=4096, ) -> tuple[int, int]:
         current_size = len(self.transition_pairs)
-        if compute_optimal:
-            obs, info = env.reset(compute_optimal_policy=compute_optimal)
+        if self.compute_optimal:
+            obs, info = env.reset(compute_optimal_policy=True)
         else:
             obs, info = env.reset()
         optimal = info['optimal_policy']
@@ -34,7 +35,7 @@ class RandomSampler:
             action = env.action_space.sample()
             if action is not None:
                 next_obs, reward, terminated, truncated, info = env.step(action)
-                if compute_optimal:
+                if self.compute_optimal:
                     next_optimal = info['optimal_policy']
                     self.transition_pairs.append(
                         (obs, torch.tensor(action), torch.tensor(next_obs), torch.tensor(reward), torch.tensor(int(optimal == next_optimal))))
