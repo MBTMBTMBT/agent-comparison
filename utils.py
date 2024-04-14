@@ -20,6 +20,7 @@ from env_sampler import TransitionBuffer
 from feature_model import FeatureNet
 from simple_gridworld import SimpleGridWorld, SimpleGridWorldWithStateAbstraction
 from typing import Type
+from matplotlib import cm
 
 
 def find_latest_checkpoint(model_dir, start_with='model_epoch_'):
@@ -297,7 +298,7 @@ def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.n
     z_vectors = []
     fake_x_imgs = []
     real_x_imgs = []
-    for observation, terminated, position, connections, reward in iterable_env:
+    for observation, terminated, position, connections, reward, optimal_policy in iterable_env:
         if observation is not None:
             observation = torch.unsqueeze(observation, dim=0).to(device)
             with torch.no_grad():
@@ -352,25 +353,80 @@ def plot_decoded_images(iterable_env: collections.abc.Iterator, encoder: torch.n
     plt.close(fig)
 
 
-def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, num_dims: int,
-                         save_path: str, device=torch.device("cpu")):
+# def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.nn.Module, num_dims: int,
+#                          save_path: str, device=torch.device("cpu")):
+#     assert num_dims == 2 or num_dims == 3
+#     encoder.to(device)
+#     encoder.eval()
+#     z_vectors = [], optimal_policies = []
+#     # reset iterator before using it
+#     iterable_env.iter_reset()
+#     for observation, terminated, position, connections, reward, optimal_policy in iterable_env:
+#         if observation is not None:
+#             observation = torch.unsqueeze(observation, dim=0).to(device)
+#             with torch.no_grad():
+#                 z = encoder(observation)
+#                 z = z.detach().cpu().numpy()
+#                 z_vectors.append(z.squeeze(0))
+#                 optimal_policies.append(int(optimal_policy.item()))
+#     if num_dims == 2:
+#         plt.figure(figsize=(8, 8))
+#         for z in z_vectors:
+#             plt.scatter(z[0], z[1])
+#         plt.xlabel("Dimension 1")
+#         plt.ylabel("Dimension 2")
+#         plt.savefig(save_path)
+#         plt.close()
+#     else:
+#         fig = plt.figure(figsize=(8, 8))
+#         ax = fig.add_subplot(111, projection='3d')
+#         for z in z_vectors:
+#             ax.scatter(z[0], z[1], z[2])
+#         ax.set_xlabel("Dimension 1")
+#         ax.set_ylabel("Dimension 2")
+#         ax.set_zlabel("Dimension 3")
+#         # different view directions
+#         views = [(30, 30), (30, 60), (30, 90), (60, 30), (60, 60), (90, 90), ]  # List of (elev, azim) pairs
+#         # Save the plot
+#         save_name = os.path.basename(save_path).split(".")[0]
+#         save_dir = os.path.dirname(save_path)
+#         for i, (elev, azim) in enumerate(views, start=1):
+#             ax.view_init(elev=elev, azim=azim)
+#             plt.draw()  # Update the plot with the new view
+#             # Save each view to a different file
+#             save_path_ = os.path.join(save_dir, f"{save_name}_view{i}.png")
+#             plt.savefig(save_path_)
+#             # print(f"Saved plot to {save_path}")
+#         plt.close(fig)  # Close the plot figure after saving all views
+
+
+def plot_representations(iterable_env, encoder, num_dims, save_path, device=torch.device("cpu")):
     assert num_dims == 2 or num_dims == 3
     encoder.to(device)
     encoder.eval()
-    z_vectors = []
-    # reset iterator before using it
+    z_vectors, optimal_policies, positions = [], [], []
+    # Reset iterator before using it
     iterable_env.iter_reset()
-    for observation, terminated, position, connections, reward in iterable_env:
+    for observation, terminated, position, connections, reward, optimal_policy in iterable_env:
         if observation is not None:
             observation = torch.unsqueeze(observation, dim=0).to(device)
             with torch.no_grad():
                 z = encoder(observation)
                 z = z.detach().cpu().numpy()
                 z_vectors.append(z.squeeze(0))
+                optimal_policies.append(int(optimal_policy.item()))
+                positions.append(position)
+
+    # Color mapping
+    unique_policies = list(set(optimal_policies))
+    color_map = cm.get_cmap('viridis', len(unique_policies))
+    policy_color = {policy: color_map(i) for i, policy in enumerate(unique_policies)}
+
     if num_dims == 2:
         plt.figure(figsize=(8, 8))
-        for z in z_vectors:
-            plt.scatter(z[0], z[1])
+        for z, policy, position in zip(z_vectors, optimal_policies, positions):
+            plt.scatter(z[0], z[1], color=policy_color[policy])
+            plt.text(z[0], z[1], f"{position[0]:.2f}, {position[1]:.2f}", fontsize=9)
         plt.xlabel("Dimension 1")
         plt.ylabel("Dimension 2")
         plt.savefig(save_path)
@@ -378,24 +434,15 @@ def plot_representations(iterable_env: collections.abc.Iterator, encoder: torch.
     else:
         fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(111, projection='3d')
-        for z in z_vectors:
-            ax.scatter(z[0], z[1], z[2])
+        for z, policy, position in zip(z_vectors, optimal_policies, positions):
+            ax.scatter(z[0], z[1], z[2], color=policy_color[policy])
+            # ax.text(z[0], z[1], z[2], f"{position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}", fontsize=9)
+            ax.text(z[0], z[1], z[2], s=f"({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f})", fontsize=9, color='black')
         ax.set_xlabel("Dimension 1")
         ax.set_ylabel("Dimension 2")
         ax.set_zlabel("Dimension 3")
-        # different view directions
-        views = [(30, 30), (30, 60), (30, 90), (60, 30), (60, 60), (90, 90), ]  # List of (elev, azim) pairs
-        # Save the plot
-        save_name = os.path.basename(save_path).split(".")[0]
-        save_dir = os.path.dirname(save_path)
-        for i, (elev, azim) in enumerate(views, start=1):
-            ax.view_init(elev=elev, azim=azim)
-            plt.draw()  # Update the plot with the new view
-            # Save each view to a different file
-            save_path_ = os.path.join(save_dir, f"{save_name}_view{i}.png")
-            plt.savefig(save_path_)
-            # print(f"Saved plot to {save_path}")
-        plt.close(fig)  # Close the plot figure after saving all views
+        plt.savefig(save_path)
+        plt.close()
 
 
 class StepCounterCallback(BaseCallback):
