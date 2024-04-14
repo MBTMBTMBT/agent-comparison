@@ -174,6 +174,9 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         self._traj = []
 
+        self.value_grid = np.zeros_like(self.grid, dtype=np.float32)
+        self.optimal_policy = np.zeros_like(self.grid, dtype=np.uint8)
+
     def __len__(self):
         return self.shape[0] * self.shape[1]
 
@@ -215,7 +218,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                         connections[action] = 1.0
                         rewards[action] = 0.0
                         rewards[action] += 5 if new_position == self.goal_position else -1 if (
-                                    self.grid[new_position] == 'X' or new_position in self.pos_random_traps) else -0.01
+                                self.grid[new_position] == 'X' or new_position in self.pos_random_traps) else -0.01
                     elif self.grid[new_position] == 'W':
                         # hits wall
                         connections[action] = 0.0
@@ -370,10 +373,12 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             if self.random:
                 # Randomly rotate the grid
                 self.grid, (self._agent_position, self._goal_position, self.agent_position, self.goal_position) \
-                    = rotate_grid(self.grid, [self._agent_position, self._goal_position, self.agent_position, self.goal_position])
+                    = rotate_grid(self.grid,
+                                  [self._agent_position, self._goal_position, self.agent_position, self.goal_position])
                 # Randomly flip the grid
                 self.grid, (self._agent_position, self._goal_position, self.agent_position, self.goal_position) \
-                    = flip_grid(self.grid, [self._agent_position, self._goal_position, self.agent_position, self.goal_position])
+                    = flip_grid(self.grid,
+                                [self._agent_position, self._goal_position, self.agent_position, self.goal_position])
             self.reset_positions()
         else:
             self.reset_positions(agent_only=True)
@@ -439,7 +444,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                     elif (y, x) == self.goal_position:
                         row += 'G'
                     elif self.grid[y, x] == 'W':
-                        row += '#'
+                        row += 'W'
                     elif self.grid[y, x] == 'X':
                         row += 'X'
                     else:
@@ -469,6 +474,90 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                         action = 3
         return action
 
+    def action_transition_and_reward(self, coord: tuple[int, int]) -> tuple[tuple[tuple[int, int], float], ...]:
+        # Define deltas for 4 actions: up, down, left, right
+        actions = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}
+        transitions: list[tuple[tuple[int, int], float]] = []
+
+        for action, delta in actions.items():
+            # Compute new position based on the action
+            new_position = (coord[0] + delta[0], coord[1] + delta[1])
+            if (0 <= new_position[0] < self.grid.shape[0] and 0 <= new_position[1] < self.grid.shape[1]):
+                # Check for walls and special areas
+                if self.grid[new_position] == 'W':
+                    # If it's a wall, stay in place, apply wall collision penalty
+                    reward = -0.1
+                    transitions.append((coord, reward))
+                else:
+                    # If it's not a wall, check for goal and traps
+                    if new_position == self.goal_position:
+                        reward = 5.0
+                    elif new_position in self.pos_random_traps or self.grid[new_position] == 'X':
+                        reward = -1.0
+                    else:
+                        reward = -0.01
+                    transitions.append((new_position, reward))
+            else:
+                # If out of bounds, stay in place, no extra penalty
+                transitions.append((coord, -0.01))
+
+        return tuple(transitions)
+
+    def update_value_and_optimal_policy(self, gamma=0.99,
+                                        threshold=0.01,
+                                        max_iterations=16384, ):
+
+        for iteration in range(max_iterations):
+            delta = 0
+            new_value_grid = np.copy(self.value_grid)
+
+            for i in range(self.grid.shape[0]):
+                for j in range(self.grid.shape[1]):
+                    if self.grid[i, j] == 'W' or self.grid[i, j] == 'X':  # Assuming 'X' is also an undesirable state
+                        continue
+                    max_value = float('-inf')
+                    for action, (di, dj) in {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}.items():
+                        ni, nj = i + di, j + dj
+                        if 0 <= ni < self.grid.shape[0] and 0 <= nj < self.grid.shape[1] and self.grid[ni, nj] != 'W':
+                            # Calculate the reward for moving to the new cell
+                            reward = 5 if (ni, nj) == self.goal_position else -1 if self.grid[ni, nj] == 'X' or (
+                                ni, nj) in self.pos_random_traps else -0.01
+                            value = reward + gamma * self.value_grid[ni, nj]
+                        else:
+                            value = -0.01 + gamma * self.value_grid[
+                                i, j]  # Stay in place if moving out of bounds or into a wall
+
+                        if value > max_value:
+                            max_value = value
+                            self.optimal_policy[i, j] = action
+
+                    new_value_grid[i, j] = max_value
+                    delta = max(delta, np.max(np.abs(new_value_grid[i, j] - self.value_grid[i, j])))
+
+            self.value_grid = new_value_grid
+
+            if delta < threshold:
+                break
+
+
+    def get_optimal_policy_str(self):
+        policy_map = ''
+        for y in range(self.grid.shape[0]):
+            row = ''
+            for x in range(self.grid.shape[1]):
+                if (y, x) == self.agent_position:
+                    row += 'A'
+                elif (y, x) == self.goal_position:
+                    row += 'G'
+                elif self.grid[y, x] == 'W':
+                    row += 'W'
+                elif self.grid[y, x] == 'X':
+                    row += 'X'
+                else:
+                    row += ACTION_NAMES[self.optimal_policy[y, x].item()][0]
+            policy_map += row + '\n'
+        return policy_map
+
 
 def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
     # Convert the numpy array to a PIL Image
@@ -497,7 +586,8 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
 
 
 class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
-    def __init__(self, simple_gridworld: SimpleGridWorld, clusters: set[frozenset[tuple[int, int]]], cluster_action_dict: dict=None):
+    def __init__(self, simple_gridworld: SimpleGridWorld, clusters: set[frozenset[tuple[int, int]]],
+                 cluster_action_dict: dict = None):
         super(SimpleGridWorldWithStateAbstraction, self).__init__()
         self.simple_gridworld = simple_gridworld
         self.cluster_action_dict = cluster_action_dict
@@ -562,7 +652,8 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
                 # get random new position
                 rand_new_position = new_position
-                if old_position_group == new_position_group and (self.cluster_action_dict is None or self.cluster_action_dict[previous_position] == action):
+                if old_position_group == new_position_group and (
+                        self.cluster_action_dict is None or self.cluster_action_dict[previous_position] == action):
                     radian_th = 0.01
                     radian = 3.14159265 * 0.5 * radian_th  # expected radian
                     rand_candidates = [pos for pos in self.clusters_in_dict[new_position_group]]
@@ -588,7 +679,8 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
                             # generally avoid flying over someone not in the cluster.
                             for passed_grid in passed_grids:
-                                if passed_grid not in rand_candidates or self.simple_gridworld.grid[passed_grid] in ['W']:
+                                if passed_grid not in rand_candidates or self.simple_gridworld.grid[passed_grid] in [
+                                    'W']:
                                     continue_outer = True
                                     break
                             if continue_outer:
@@ -601,7 +693,8 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
                                 # print(momentum, rand_momentum, general_momentum)
                                 reward -= 0.01 * np.sum(np.abs(rand_momentum))
                                 for passed_grid in passed_grids:
-                                    if passed_grid in self.simple_gridworld.pos_random_traps or self.simple_gridworld.grid[passed_grid] in ['X']:
+                                    if passed_grid in self.simple_gridworld.pos_random_traps or \
+                                            self.simple_gridworld.grid[passed_grid] in ['X']:
                                         reward -= 1
                                 break
                 # print(f"pos {previous_position} -> pos {rand_new_position}")
@@ -628,36 +721,59 @@ class SimpleGridWorldWithStateAbstraction(gymnasium.Env):
 
 
 if __name__ == "__main__":
-    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-31.txt', make_random=True, random_traps=0, agent_position=(29, 1), goal_position=(1, 8))
-    from stable_baselines3 import PPO
-    from stable_baselines3.common.vec_env import DummyVecEnv
-    from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
-
-    dummy_env = DummyVecEnv([lambda: env])
-    prior_agent = PPO.load("saved-models/simple-gridworld-ppo-prior-149.zip", env=env, verbose=1)
-    agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
-    sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
-    sampler.sample()
-    clusters, cluster_action_dict = sampler.make_clusters(64, return_actions_dict=True)
-    # print(clusters)
-    sampler.plot_classified_grid("./gridworld-maze-31.gif", None, None, clusters=clusters)
-    env = SimpleGridWorldWithStateAbstraction(env, clusters,)  # cluster_action_dict)
-    # env.make_directed_graph(show=True)
-    # exit()
-    obs = env.reset()
+    env = SimpleGridWorld('envs/simple_grid/gridworld-maze-13.txt', make_random=True, random_traps=0,
+                          agent_position=None, goal_position=(1, 8), max_steps=1024,)
+    obs, info = env.reset()
+    env.update_value_and_optimal_policy()
+    print('optimal policy:')
+    print(env.get_optimal_policy_str())
+    coord = info['position']
     done = False
     reward_sum = 0
     while not done:
-        env.render(mode='human')
-        action = env.handle_keyboard_input()
-        if action is not None:
-            obs, reward, terminated, truncated, info = env.step(action)
-            reward_sum += reward
-            if terminated:
-                print("Game Over. Reward:", reward_sum)
-                done = True
-            elif truncated:
-                print("Episode truncated.")
-                done = True
+        env.render(mode='console')
+        action = env.optimal_policy[coord]
+        obs, reward, terminated, truncated, info = env.step(action)
+        coord = info['position']
+        reward_sum += reward
+        if terminated:
+            print("Game Over. Reward:", reward_sum)
+            done = True
+        elif truncated:
+            print("Episode truncated.")
+            done = True
         # time.sleep(0.1)
     env.close()
+
+    # from stable_baselines3 import PPO
+    # from stable_baselines3.common.vec_env import DummyVecEnv
+    # from behaviour_tracer import BaselinePPOSimpleGridBehaviourIterSampler
+    #
+    # dummy_env = DummyVecEnv([lambda: env])
+    # prior_agent = PPO.load("saved-models/simple-gridworld-ppo-prior-149.zip", env=env, verbose=1)
+    # agent = PPO.load("saved-models/simple-gridworld-ppo-149.zip", env=env, verbose=1)
+    # sampler = BaselinePPOSimpleGridBehaviourIterSampler(env, agent, prior_agent, reset_env=True)
+    # sampler.sample()
+    # clusters, cluster_action_dict = sampler.make_clusters(64, return_actions_dict=True)
+    # # print(clusters)
+    # sampler.plot_classified_grid("./gridworld-maze-31.gif", None, None, clusters=clusters)
+    # env = SimpleGridWorldWithStateAbstraction(env, clusters, )  # cluster_action_dict)
+    # # env.make_directed_graph(show=True)
+    # # exit()
+    # obs = env.reset()
+    # done = False
+    # reward_sum = 0
+    # while not done:
+    #     env.render(mode='human')
+    #     action = env.handle_keyboard_input()
+    #     if action is not None:
+    #         obs, reward, terminated, truncated, info = env.step(action)
+    #         reward_sum += reward
+    #         if terminated:
+    #             print("Game Over. Reward:", reward_sum)
+    #             done = True
+    #         elif truncated:
+    #             print("Episode truncated.")
+    #             done = True
+    #     # time.sleep(0.1)
+    # env.close()
