@@ -1,21 +1,21 @@
-import numpy as np
-from matplotlib import pyplot as plt
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-import math
-
 if __name__ == '__main__':
+    import numpy as np
+    from matplotlib import pyplot as plt
+    from torch.utils.data import DataLoader
+    from torch.utils.tensorboard import SummaryWriter
+    from tqdm import tqdm
+    import math
+
     import torch
     from configurations import maze13_sampling, mix_sampling, four_room13_sampling
     from feature_model import FeatureNet
 
-    CONFIGS = mix_sampling
+    CONFIGS = maze13_sampling
 
     # model configs
     NUM_ACTIONS = 4
-    LATENT_DIMS = 8
-    RECONSTRUCT_SIZE = (72, 72)
+    LATENT_DIMS = 2
+    RECONSTRUCT_SIZE = (96, 96)
     RECONSTRUCT_SCALE = 2
 
     # sampler configs
@@ -27,7 +27,9 @@ if __name__ == '__main__':
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
-        'dec': 0.1,
+        'dec': 0.0,
+        'rwd': 0.0,
+        'demo': 1.0,
     }
     BATCH_SIZE = 256
     LR = 1e-4
@@ -37,9 +39,9 @@ if __name__ == '__main__':
     SAVE_FREQ = 1
     TEST_FREQ = 5
 
-    session_name = "learn_feature_reconstruct"
+    session_name = "learn_feature_maze13_demo"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=RECONSTRUCT_SIZE, initial_scale_factor=RECONSTRUCT_SCALE, device=device).to(device)
+    model = FeatureNet(NUM_ACTIONS, n_latent_dims=LATENT_DIMS, lr=LR, img_size=RECONSTRUCT_SIZE, initial_scale_factor=RECONSTRUCT_SCALE, device=device, weights=WEIGHTS).to(device)
 
     from utils import find_latest_checkpoint
     import os
@@ -68,7 +70,7 @@ if __name__ == '__main__':
 
     progress_bar = tqdm(range(epoch_counter, EPOCHS), desc=f'Training Epoch {epoch_counter}')
     for i, batch in enumerate(progress_bar):
-        sampler = RandomSampler()
+        sampler = RandomSampler(not WEIGHTS['demo'] == 0.0)
         envs = [make_env(config) for config in CONFIGS]
         while len(sampler.transition_pairs) < SAMPLE_SIZE:
             for env in envs:
@@ -78,16 +80,36 @@ if __name__ == '__main__':
         dataloader = DataLoader(transition_buffer, batch_size=BATCH_SIZE, shuffle=True)
         loss_val = 0.0
         for _ in range(SAMPLE_REPLAY_TIME):
-            for x0, a, x1 in dataloader:
-                x0 = x0.to(device)
-                a = a.to(device)
-                x1 = x1.to(device)
-                loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val = model.train_batch(x0, x1, a)
-                tb_writer.add_scalar('loss', loss_val, step_counter)
-                tb_writer.add_scalar('inv_loss', inv_loss_val, step_counter)
-                tb_writer.add_scalar('ratio_loss', ratio_loss_val, step_counter)
-                tb_writer.add_scalar('pixel_loss', pixel_loss_val, step_counter)
-                step_counter += 1
+            if WEIGHTS['demo'] == 0.0:
+                for x0, a, x1, r in dataloader:
+                    x0 = x0.to(device)
+                    a = a.to(device)
+                    x1 = x1.to(device)
+                    r = r.to(device)
+                    loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val, reward_loss_val = model.train_batch(
+                        x0, x1, a, r)
+                    tb_writer.add_scalar('loss', loss_val, step_counter)
+                    tb_writer.add_scalar('inv_loss', inv_loss_val, step_counter)
+                    tb_writer.add_scalar('ratio_loss', ratio_loss_val, step_counter)
+                    tb_writer.add_scalar('pixel_loss', pixel_loss_val, step_counter)
+                    tb_writer.add_scalar('reward_loss', reward_loss_val, step_counter)
+                    step_counter += 1
+            else:
+                for x0, a, x1, r, d in dataloader:
+                    x0 = x0.to(device)
+                    a = a.to(device)
+                    x1 = x1.to(device)
+                    r = r.to(device)
+                    d = d.to(device)
+                    loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val, reward_loss_val, demo_loss_val = model.train_batch(
+                        x0, x1, a, r, d)
+                    tb_writer.add_scalar('loss', loss_val, step_counter)
+                    tb_writer.add_scalar('inv_loss', inv_loss_val, step_counter)
+                    tb_writer.add_scalar('ratio_loss', ratio_loss_val, step_counter)
+                    tb_writer.add_scalar('pixel_loss', pixel_loss_val, step_counter)
+                    tb_writer.add_scalar('reward_loss', reward_loss_val, step_counter)
+                    tb_writer.add_scalar('demo_loss', demo_loss_val, step_counter)
+                    step_counter += 1
 
         if epoch_counter % TEST_FREQ == 0:
             encoder = model.phi
