@@ -331,10 +331,16 @@ class FeatureNet(torch.nn.Module):
         z0 = self.phi(x0)
         z1 = self.phi(x1)
         # z1_hat = self.fwd_model(z0, a)
-        loss, inv_loss, ratio_loss, pixel_loss, reward_loss = self.compute_loss(x0, x1, z0, z1, a, r, d)
-        loss.backward()
-        self.optimizer.step()
-        return loss.detach().cpu().item(), inv_loss.detach().cpu().item(), ratio_loss.detach().cpu().item(), pixel_loss.detach().cpu().item(), reward_loss.detach().cpu().item()
+        if d is None:
+            loss, inv_loss, ratio_loss, pixel_loss, reward_loss = self.compute_loss(x0, x1, z0, z1, a, r, d)
+            loss.backward()
+            self.optimizer.step()
+            return loss.detach().cpu().item(), inv_loss.detach().cpu().item(), ratio_loss.detach().cpu().item(), pixel_loss.detach().cpu().item(), reward_loss.detach().cpu().item()
+        else:
+            loss, inv_loss, ratio_loss, pixel_loss, reward_loss, demo_loss = self.compute_loss(x0, x1, z0, z1, a, r, d)
+            loss.backward()
+            self.optimizer.step()
+            return loss.detach().cpu().item(), inv_loss.detach().cpu().item(), ratio_loss.detach().cpu().item(), pixel_loss.detach().cpu().item(), reward_loss.detach().cpu().item(), demo_loss.detach().cpu().item()
 
     def save(self, checkpoint_path, counter=-1, _counter=-1, performance=0.0):
         torch.save(
