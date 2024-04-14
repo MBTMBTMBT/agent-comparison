@@ -230,10 +230,10 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             connections = torch.tensor([connections[i] for i in range(len(connections))])
             rewards = torch.tensor([rewards[i] for i in range(len(rewards))])
             self.agent_position = temp_agent_position
-            return observation, terminated, temp_iter_coord, connections, rewards
+            return observation, terminated, temp_iter_coord, connections, rewards, self.optimal_policy[temp_iter_coord]
 
         self.agent_position = temp_agent_position
-        return None, None, temp_iter_coord, None, None
+        return None, None, temp_iter_coord, None, None, self.optimal_policy[temp_iter_coord]
 
     def iter_reset(self):
         self.iter_index = 0
