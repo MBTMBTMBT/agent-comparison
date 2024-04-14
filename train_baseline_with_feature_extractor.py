@@ -17,8 +17,8 @@ if __name__ == '__main__':
     from functools import partial
     from stable_baselines3.common.env_util import DummyVecEnv
 
-    TRAIN_CONFIGS = maze13_sampling
-    EVAL_CONFIGS = maze13_sampling
+    TRAIN_CONFIGS = mix_sampling
+    EVAL_CONFIGS = mix_sampling_eval
 
     # model configs
     NUM_ACTIONS = 4
@@ -38,7 +38,7 @@ if __name__ == '__main__':
         'inv': 1.0,
         'dis': 1.0,
         'dec': 0.0,
-        'rwd': 0.0,
+        'rwd': 1.0,
     }
     BATCH_SIZE = 32
     LR = 1e-4
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     PRE_TRAIN_STEPS = SAMPLE_SIZE * SAMPLE_REPLAY_TIME // BATCH_SIZE * 0
     SAVE_FREQ = PRE_TRAIN_STEPS // 5
 
-    EPOCHS = 3
+    EPOCHS = 10
     NUM_STEPS_PER_EPOCH = MAX_SAMPLE_STEP * len(TRAIN_CONFIGS) * SAMPLE_REPLAY_TIME * 20
 
     # eval configs
@@ -55,9 +55,9 @@ if __name__ == '__main__':
     EVAL_FREQ = NUM_STEPS_PER_EPOCH // len(TRAIN_CONFIGS) // SAMPLE_REPLAY_TIME // 5
 
     # CNN DECODER (CONTROL GROUP)
-    USE_CNN_DECODER = True
+    USE_CNN_DECODER = False
 
-    session_name = "ppo_feature_extractor_maze13_64d_cnn"
+    session_name = "ppo_feature_extractor_mix_rand_64d_reward"
     feature_model_name = 'feature_model_step'
     baseline_model_name = 'baseline_model'
 
