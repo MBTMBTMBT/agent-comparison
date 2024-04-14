@@ -135,7 +135,9 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
     metadata = {'render.modes': ['human', 'rgb_array', 'console']}
 
     def __init__(self, text_file, cell_size=(20, 20), obs_size=(128, 128), agent_position=None, goal_position=None,
-                 random_traps=0, make_random=False, max_steps=128, compute_optimal=False, ):
+                 random_traps=0, make_random=False, max_steps=128,
+                 # compute_optimal=False,
+                 ):
         super(SimpleGridWorld, self).__init__()
         self.random = make_random
         self.max_steps = max_steps
@@ -176,7 +178,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         self.value_grid = np.zeros_like(self.grid, dtype=np.float32)
         self.optimal_policy = np.zeros_like(self.grid, dtype=np.uint8)
-        self.compute_optimal_policy = compute_optimal
+        # self.compute_optimal_policy = compute_optimal
 
     def __len__(self):
         return self.shape[0] * self.shape[1]
@@ -370,7 +372,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                                                             "optimal_policy": self.optimal_policy[
                                                                 self.agent_position].item()}
 
-    def reset(self, seed=None, options=None, no_random=False):
+    def reset(self, seed=None, options=None, no_random=False, compute_optimal_policy=False):
         super().reset(seed=seed)
         self.step_count = 0
         if not no_random:
@@ -397,7 +399,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         observation /= 255.0 if observation.max() > 1.0 else 1.0
 
         # get optimal policy
-        if self.compute_optimal_policy:
+        if compute_optimal_policy:
             self.update_value_and_optimal_policy()
 
         return observation, {"position": self.agent_position, "goal_position": self.goal_position,
