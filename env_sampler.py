@@ -38,7 +38,7 @@ class RandomSampler:
                 if self.compute_optimal:
                     next_optimal = info['optimal_policy']
                     self.transition_pairs.append(
-                        (obs, torch.tensor(action), torch.tensor(next_obs), torch.tensor(reward), torch.tensor(int(optimal == next_optimal))))
+                        (obs, torch.tensor(action), torch.tensor(next_obs), torch.tensor(reward), torch.tensor(int(optimal != next_optimal))))
                 else:
                     self.transition_pairs.append(
                         (obs, torch.tensor(action), torch.tensor(next_obs), torch.tensor(reward),))
