@@ -428,7 +428,7 @@ def plot_representations(iterable_env, encoder, num_dims, save_path, device=torc
         plt.figure(figsize=(8, 8))
         for z, policy, position in zip(z_vectors, optimal_policies, positions):
             plt.scatter(z[0], z[1], color=policy_color[policy])
-            plt.text(z[0], z[1], f"{position[0]:.2f}, {position[1]:.2f}", fontsize=9)
+            plt.text(z[0], z[1], f"{position[0]:d},{position[1]:d}", fontsize=9)
         plt.xlabel("Dimension 1")
         plt.ylabel("Dimension 2")
         plt.savefig(save_path)
@@ -439,7 +439,7 @@ def plot_representations(iterable_env, encoder, num_dims, save_path, device=torc
         for z, policy, position in zip(z_vectors, optimal_policies, positions):
             ax.scatter(z[0], z[1], z[2], color=policy_color[policy])
             # ax.text(z[0], z[1], z[2], f"{position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}", fontsize=9)
-            ax.text(z[0], z[1], z[2], s=f"({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f})", fontsize=9, color='black')
+            ax.text(z[0], z[1], z[2], s=f"({position[0]:d},{position[1]:d},{position[2]:d})", fontsize=9, color='black')
         ax.set_xlabel("Dimension 1")
         ax.set_ylabel("Dimension 2")
         ax.set_zlabel("Dimension 3")
