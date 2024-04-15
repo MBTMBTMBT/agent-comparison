@@ -407,6 +407,8 @@ def plot_representations(iterable_env, encoder, num_dims, save_path, device=torc
     z_vectors, optimal_policies, positions = [], [], []
     # Reset iterator before using it
     iterable_env.iter_reset()
+    # compute optimal policy
+    iterable_env.update_value_and_optimal_policy()
     for observation, terminated, position, connections, reward, optimal_policy in iterable_env:
         if observation is not None:
             observation = torch.unsqueeze(observation, dim=0).to(device)
