@@ -27,19 +27,19 @@ if __name__ == '__main__':
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
-        'dec': 0.0,
+        'dec': 1.0,
         'rwd': 0.0,
-        'demo': 1.0,
+        'demo': 5.0,
     }
     BATCH_SIZE = 32
     LR = 1e-4
 
     # train configs
-    EPOCHS = 8000
+    EPOCHS = 80
     SAVE_FREQ = 1
     TEST_FREQ = 5
 
-    session_name = "learn_feature_maze13_demo"
+    session_name = "learn_feature_maze13_strong_demo"
     feature_model_name = 'feature_model_step'
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
