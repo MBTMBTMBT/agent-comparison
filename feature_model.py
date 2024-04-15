@@ -37,7 +37,7 @@ class FlexibleImageEncoder(torch.nn.Module):
         x = torch.flatten(x, 1)
         x = torch.tanh(x)
         x = self.fc(x)
-        # x = torch.tanh(x)
+        x = torch.tanh(x)
         return x
 
 
