@@ -283,6 +283,7 @@ class FeatureNet(torch.nn.Module):
 
     def demo_loss(self, z0, z1, same_optimal_policy: torch.Tensor):
         # same_optimal_policy = 1 - same_optimal_policy  # inverse the logic so that same is 0.
+        # different is 0, same is 1.
         z0_mul = torch.mul(z0, same_optimal_policy.view(z0.shape[0], 1,))
         z1_mul = torch.mul(z1, same_optimal_policy.view(z0.shape[0], 1,))
         return self.mse(z0_mul, z1_mul)
