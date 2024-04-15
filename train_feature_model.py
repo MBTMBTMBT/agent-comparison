@@ -27,19 +27,20 @@ if __name__ == '__main__':
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
+        'neighbour': 0.0,
         'dec': 1.0,
         'rwd': 0.0,
-        'demo': 5.0,
+        'demo': 0.0,
     }
-    BATCH_SIZE = 32
+    BATCH_SIZE = 64
     LR = 1e-4
 
     # train configs
     EPOCHS = 80
     SAVE_FREQ = 1
-    TEST_FREQ = 5
+    TEST_FREQ = 1
 
-    session_name = "learn_feature_maze13_strong_demo"
+    session_name = "learn_feature_maze13_dec"
     feature_model_name = 'feature_model_step'
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -82,36 +83,31 @@ if __name__ == '__main__':
         dataloader = DataLoader(transition_buffer, batch_size=BATCH_SIZE, shuffle=True)
         loss_val = 0.0
         for _ in range(SAMPLE_REPLAY_TIME):
-            if WEIGHTS['demo'] == 0.0:
-                for x0, a, x1, r in dataloader:
-                    x0 = x0.to(device)
-                    a = a.to(device)
-                    x1 = x1.to(device)
-                    r = r.to(device)
-                    loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val, reward_loss_val = model.train_batch(
-                        x0, x1, a, r)
-                    tb_writer.add_scalar('loss', loss_val, step_counter)
-                    tb_writer.add_scalar('inv_loss', inv_loss_val, step_counter)
-                    tb_writer.add_scalar('ratio_loss', ratio_loss_val, step_counter)
-                    tb_writer.add_scalar('pixel_loss', pixel_loss_val, step_counter)
-                    tb_writer.add_scalar('reward_loss', reward_loss_val, step_counter)
-                    step_counter += 1
-            else:
-                for x0, a, x1, r, d in dataloader:
-                    x0 = x0.to(device)
-                    a = a.to(device)
-                    x1 = x1.to(device)
-                    r = r.to(device)
+            for batch in dataloader:
+                d = None
+                if WEIGHTS['demo'] == 0.0:
+                    x0, a, x1, r = batch  # Assuming batch format is [x0, a, x1, r] when 'demo' is not used
+                else:
+                    x0, a, x1, r, d = batch  # Assuming batch format is [x0, a, x1, r, d] when 'demo' is used
+
+                # Move tensors to the appropriate device
+                x0 = x0.to(device)
+                a = a.to(device)
+                x1 = x1.to(device)
+                r = r.to(device)
+                if d is not None:
                     d = d.to(device)
-                    loss_val, inv_loss_val, ratio_loss_val, pixel_loss_val, reward_loss_val, demo_loss_val = model.train_batch(
-                        x0, x1, a, r, d)
-                    tb_writer.add_scalar('loss', loss_val, step_counter)
-                    tb_writer.add_scalar('inv_loss', inv_loss_val, step_counter)
-                    tb_writer.add_scalar('ratio_loss', ratio_loss_val, step_counter)
-                    tb_writer.add_scalar('pixel_loss', pixel_loss_val, step_counter)
-                    tb_writer.add_scalar('reward_loss', reward_loss_val, step_counter)
-                    tb_writer.add_scalar('demo_loss', demo_loss_val, step_counter)
-                    step_counter += 1
+
+                # Train batch and calculate losses
+                loss_vals = model.train_batch(x0, x1, a, r, d)
+
+                # Log values to TensorBoard
+                names = ['loss', 'inv_loss', 'neighbour_loss', 'ratio_loss', 'pixel_loss', 'reward_loss', 'demo_loss']
+                for name, val in zip(names, loss_vals):
+                    tb_writer.add_scalar(name, val, step_counter)
+
+                # Increment the step counter
+                step_counter += 1
 
         if epoch_counter % TEST_FREQ == 0:
             _plot_dir = os.path.join(session_name, 'plots')
