@@ -27,8 +27,8 @@ if __name__ == '__main__':
     WEIGHTS = {
         'inv': 1.0,
         'dis': 1.0,
-        'neighbour': 0.0,
-        'dec': 1.0,
+        'neighbour': 1.0,
+        'dec': 0.0,
         'rwd': 0.0,
         'demo': 0.0,
     }
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     SAVE_FREQ = 1
     TEST_FREQ = 1
 
-    session_name = "learn_feature_maze13_dec"
+    session_name = "learn_feature_maze13_neighbour"
     feature_model_name = 'feature_model_step'
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
