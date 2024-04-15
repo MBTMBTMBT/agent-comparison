@@ -282,7 +282,10 @@ class FeatureNet(torch.nn.Module):
         return self.bce_loss(input=fakes, target=is_fake.float())
 
     def demo_loss(self, z0, z1, same_optimal_policy: torch.Tensor):
-        return self.mse(torch.mul(z0, same_optimal_policy.view(z0.shape[0], 1, 1)), torch.mul(z1, same_optimal_policy.view(z0.shape[0], 1, 1)))
+        same_optimal_policy = 1 - same_optimal_policy  # inverse the logic so that same is 0.
+        z0_mul = torch.mul(z0, same_optimal_policy.view(z0.shape[0], 1,))
+        z1_mul = torch.mul(z1, same_optimal_policy.view(z0.shape[0], 1,))
+        return self.mse(z0_mul, z1_mul)
 
     def pixel_loss(self, x, z):
         self.decoder.train()
