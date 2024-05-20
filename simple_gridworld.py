@@ -177,7 +177,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self._traj = []
 
         self.value_grid = np.zeros_like(self.grid, dtype=np.float32)
-        self.optimal_policy = np.zeros_like(self.grid, dtype=np.uint8)
+        self.optimal_policy = np.zeros((*self.grid.shape, 4), dtype=np.float16)
         # self.compute_optimal_policy = compute_optimal
 
     def __len__(self):
@@ -341,7 +341,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             elif self.grid[new_position] == 'W':
                 hits_wall = True
 
-        terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_position] == 'X'
+        terminated = self.agent_position == self.goal_position  # or self.grid[self.agent_po10.70.27.253sition] == 'X'
         truncated = False
         reward = 5 if self.agent_position == self.goal_position else -1 if (
                 self.grid[self.agent_position] == 'X' or self.agent_position in self.pos_random_traps) else -0.01
@@ -403,7 +403,7 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             self.update_value_and_optimal_policy()
 
         return observation, {"position": self.agent_position, "goal_position": self.goal_position,
-                             "optimal_policy": self.optimal_policy[self.agent_position].item()}
+                             "optimal_policy": self.optimal_policy[self.agent_position]}
 
     def get_observation(self):
         observation = pygame.surfarray.array3d(self.cached_surface)
@@ -515,41 +515,122 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
 
         return tuple(transitions)
 
-    def update_value_and_optimal_policy(self, gamma=0.99,
-                                        threshold=0.01,
-                                        max_iterations=16384, ):
+    # def update_value_and_optimal_policy(self, gamma=0.99,
+    #                                     threshold=0.01,
+    #                                     max_iterations=16384, ):
+    #
+    #     for iteration in range(max_iterations):
+    #         delta = 0
+    #         new_value_grid = np.copy(self.value_grid)
+    #
+    #         for i in range(self.grid.shape[0]):
+    #             for j in range(self.grid.shape[1]):
+    #                 if self.grid[i, j] == 'W' or self.grid[i, j] == 'X':  # Assuming 'X' is also an undesirable state
+    #                     continue
+    #                 max_value = float('-inf')
+    #                 for action, (di, dj) in {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}.items():
+    #                     ni, nj = i + di, j + dj
+    #                     if 0 <= ni < self.grid.shape[0] and 0 <= nj < self.grid.shape[1] and self.grid[ni, nj] != 'W':
+    #                         # Calculate the reward for moving to the new cell
+    #                         reward = 5 if (ni, nj) == self.goal_position else -1 if self.grid[ni, nj] == 'X' or (
+    #                             ni, nj) in self.pos_random_traps else -0.01
+    #                         value = reward + gamma * self.value_grid[ni, nj]
+    #                     else:
+    #                         value = -0.01 + gamma * self.value_grid[
+    #                             i, j]  # Stay in place if moving out of bounds or into a wall
+    #
+    #                     if value > max_value:
+    #                         max_value = value
+    #                         self.optimal_policy[i, j] = action
+    #
+    #                 new_value_grid[i, j] = max_value
+    #                 delta = max(delta, np.max(np.abs(new_value_grid[i, j] - self.value_grid[i, j])))
+    #
+    #         self.value_grid = new_value_grid
+    #
+    #         if delta < threshold:
+    #             break
 
+    def update_value_and_optimal_policy(self, gamma=0.99, threshold=0.00001, max_iterations=16384):
+        # First loop: Value iteration
         for iteration in range(max_iterations):
             delta = 0
             new_value_grid = np.copy(self.value_grid)
 
             for i in range(self.grid.shape[0]):
                 for j in range(self.grid.shape[1]):
-                    if self.grid[i, j] == 'W' or self.grid[i, j] == 'X':  # Assuming 'X' is also an undesirable state
+                    if self.grid[i, j] == 'W' or self.grid[i, j] == 'X' or (i, j) == self.goal_position:
                         continue
-                    max_value = float('-inf')
+
+                    action_values = []
+
                     for action, (di, dj) in {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}.items():
                         ni, nj = i + di, j + dj
                         if 0 <= ni < self.grid.shape[0] and 0 <= nj < self.grid.shape[1] and self.grid[ni, nj] != 'W':
-                            # Calculate the reward for moving to the new cell
-                            reward = 5 if (ni, nj) == self.goal_position else -1 if self.grid[ni, nj] == 'X' or (
-                                ni, nj) in self.pos_random_traps else -0.01
+                            reward = 5 if (ni, nj) == self.goal_position else -1 if (self.grid[ni, nj] == 'X' or (
+                                ni, nj) in self.pos_random_traps) else -0.01
                             value = reward + gamma * self.value_grid[ni, nj]
                         else:
-                            value = -0.01 + gamma * self.value_grid[
-                                i, j]  # Stay in place if moving out of bounds or into a wall
+                            reward = -0.01 - 0.1
+                            value = reward + gamma * self.value_grid[i, j]
 
-                        if value > max_value:
-                            max_value = value
-                            self.optimal_policy[i, j] = action
+                        action_values.append(value)
 
-                    new_value_grid[i, j] = max_value
-                    delta = max(delta, np.max(np.abs(new_value_grid[i, j] - self.value_grid[i, j])))
+                    new_value_grid[i, j] = max(action_values)
+                    delta = max(delta, np.abs(new_value_grid[i, j] - self.value_grid[i, j]))
 
+            new_value_grid[self.goal_position] = 0  # Ensure the goal position value is locked to 0
             self.value_grid = new_value_grid
 
             if delta < threshold:
                 break
+
+        # Second loop: Calculate optimal policy based on the converged value grid
+        for i in range(self.grid.shape[0]):
+            for j in range(self.grid.shape[1]):
+                if self.grid[i, j] == 'W' or self.grid[i, j] == 'X':
+                    continue
+
+                action_values = []
+                values = []
+
+                for action, (di, dj) in {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}.items():
+                    ni, nj = i + di, j + dj
+                    if 0 <= ni < self.grid.shape[0] and 0 <= nj < self.grid.shape[1] and self.grid[ni, nj] != 'W':
+                        reward = 5 if (ni, nj) == self.goal_position else -1 if self.grid[ni, nj] == 'X' or (
+                            ni, nj) in self.pos_random_traps else -0.01
+                        value = reward + gamma * self.value_grid[ni, nj]
+                    else:
+                        value = -0.01 + gamma * self.value_grid[i, j]
+
+                    action_values.append((action, value))
+                    values.append(value)
+
+                max_value = max(values)
+                best_actions = [action for action, value in action_values if abs(max_value - value) < threshold]
+
+                prob = 1 / len(best_actions)
+                self.optimal_policy[i, j] = np.zeros(4)  # Reset probabilities
+                for action in best_actions:
+                    self.optimal_policy[i, j, action] = prob
+
+    # def get_optimal_policy_str(self):
+    #     policy_map = ''
+    #     for y in range(self.grid.shape[0]):
+    #         row = ''
+    #         for x in range(self.grid.shape[1]):
+    #             if (y, x) == self.agent_position:
+    #                 row += 'A    '
+    #             elif (y, x) == self.goal_position:
+    #                 row += 'G    '
+    #             elif self.grid[y, x] == 'W':
+    #                 row += 'W    '
+    #             elif self.grid[y, x] == 'X':
+    #                 row += 'X    '
+    #             else:
+    #                 row += ACTION_NAMES[self.optimal_policy[y, x].item()][0]
+    #         policy_map += row + '\n'
+    #     return policy_map
 
     def get_optimal_policy_str(self):
         policy_map = ''
@@ -557,15 +638,19 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
             row = ''
             for x in range(self.grid.shape[1]):
                 if (y, x) == self.agent_position:
-                    row += 'A'
+                    row += 'A    '
                 elif (y, x) == self.goal_position:
-                    row += 'G'
+                    row += 'G    '
                 elif self.grid[y, x] == 'W':
-                    row += 'W'
+                    row += 'W    '
                 elif self.grid[y, x] == 'X':
-                    row += 'X'
+                    row += 'X    '
                 else:
-                    row += ACTION_NAMES[self.optimal_policy[y, x].item()][0]
+                    action_probabilities = self.optimal_policy[y, x]
+                    max_prob = np.max(action_probabilities)
+                    best_actions = [ACTION_NAMES[i][0] for i, prob in enumerate(action_probabilities) if
+                                    prob == max_prob]
+                    row += '/'.join(best_actions) + '    '
             policy_map += row + '\n'
         return policy_map
 
@@ -591,7 +676,7 @@ def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
     processed_tensor = transform_compose(pil_image)
     # Normalize the tensor to [0, 1] (if not already normalized)
     processed_tensor /= 255.0 if processed_tensor.max() > 1.0 else 1.0
-    # Add a batch dimension
+    # Add a batch dimensionget_optimal_policy_str
     processed_tensor = processed_tensor.unsqueeze(0)
     return processed_tensor
 
@@ -738,23 +823,25 @@ if __name__ == "__main__":
     env.update_value_and_optimal_policy()
     print('optimal policy:')
     print(env.get_optimal_policy_str())
-    coord = info['position']
-    done = False
-    reward_sum = 0
-    while not done:
-        env.render(mode='console')
-        action = env.optimal_policy[coord]
-        obs, reward, terminated, truncated, info = env.step(action)
-        coord = info['position']
-        reward_sum += reward
-        if terminated:
-            print("Game Over. Reward:", reward_sum)
-            done = True
-        elif truncated:
-            print("Episode truncated.")
-            done = True
-        # time.sleep(0.1)
-    env.close()
+    print(env.value_grid)
+    print(env.optimal_policy)
+    # coord = info['position']
+    # done = False
+    # reward_sum = 0
+    # while not done:
+    #     env.render(mode='console')
+    #     action = env.optimal_policy[coord]
+    #     obs, reward, terminated, truncated, info = env.step(action)
+    #     coord = info['position']
+    #     reward_sum += reward
+    #     if terminated:
+    #         print("Game Over. Reward:", reward_sum)
+    #         done = True
+    #     elif truncated:
+    #         print("Episode truncated.")
+    #         done = True
+    #     # time.sleep(0.1)
+    # env.close()
 
     # from stable_baselines3 import PPO
     # from stable_baselines3.common.vec_env import DummyVecEnv
