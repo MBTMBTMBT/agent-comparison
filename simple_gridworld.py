@@ -1,4 +1,5 @@
 import collections
+import math
 import random
 from itertools import product
 
@@ -177,6 +178,8 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
         self._traj = []
 
         self.value_grid = np.zeros_like(self.grid, dtype=np.float32)
+        self.control_info_grid = np.zeros_like(self.grid, dtype=np.float32)
+        self.info_to_go_grid = np.zeros_like(self.grid, dtype=np.float32)
         self.optimal_policy = np.zeros((*self.grid.shape, 4), dtype=np.float16)
         # self.compute_optimal_policy = compute_optimal
 
@@ -653,6 +656,45 @@ class SimpleGridWorld(gymnasium.Env, collections.abc.Iterator):
                     row += '/'.join(best_actions) + '    '
             policy_map += row + '\n'
         return policy_map
+
+
+    def update_control_info(self, gamma=0.99, threshold=0.00001, max_iterations=16384):
+        self.update_value_and_optimal_policy(gamma, threshold, max_iterations)
+        for iteration in range(max_iterations):
+            delta = 0
+            new_control_info_grid = np.copy(self.control_info_grid)
+            new_info_to_go_grid = np.copy(self.info_to_go_grid)
+
+            for i in range(self.grid.shape[0]):
+                for j in range(self.grid.shape[1]):
+                    if self.grid[i, j] == 'W' or self.grid[i, j] == 'X' or (i, j) == self.goal_position:
+                        continue
+
+                    action_values = []
+
+                    for action, (di, dj) in {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1)}.items():
+                        ni, nj = i + di, j + dj
+                        prior = np.ones_like(self.optimal_policy[i, j]) / len(self.optimal_policy[i, j])
+                        control_info = np.sum(self.optimal_policy[i, j] * np.log2(self.optimal_policy[i, j] / prior))
+                        if 0 <= ni < self.grid.shape[0] and 0 <= nj < self.grid.shape[1] and self.grid[ni, nj] != 'W':
+                            # reward = 5 if (ni, nj) == self.goal_position else -1 if (self.grid[ni, nj] == 'X' or (
+                            #     ni, nj) in self.pos_random_traps) else -0.01
+                            # value = reward + gamma * self.value_grid[ni, nj]
+                            control_info = np.sum(self.optimal_policy[i, j] * np.log2(self.optimal_policy[i, j] / prior))
+                        else:
+                            # reward = -0.01 - 0.1
+                            # value = reward + gamma * self.value_grid[i, j]
+
+                        action_values.append(value)
+
+                    new_value_grid[i, j] = max(action_values)
+                    delta = max(delta, np.abs(new_value_grid[i, j] - self.value_grid[i, j]))
+
+            new_value_grid[self.goal_position] = 0  # Ensure the goal position value is locked to 0
+            self.value_grid = new_value_grid
+
+            if delta < threshold:
+                break
 
 
 def preprocess_image(img: np.ndarray, rotate=False, size=None) -> torch.Tensor:
